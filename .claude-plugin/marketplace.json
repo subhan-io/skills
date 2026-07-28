@@ -1,0 +1,19 @@
+{
+  "name": "subhan-skills",
+  "owner": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "description": "Personal agent skills, installable on any machine",
+  "plugins": [
+    {
+      "name": "dispatch-agents",
+      "source": "./",
+      "skills": ["./skills/dispatch-agents"],
+      "strict": false,
+      "description": "Run one dispatcher tick over a repo's agent pipeline: shepherd agent PRs through checks, codex review and adversarial review, rebase after merges, and dispatch ready issues to background implementers in isolated worktrees.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["orchestration", "github", "code-review", "agents"]
+    }
+  ]
+}

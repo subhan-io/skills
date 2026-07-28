@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": ["approved", "findings", "criteriaUnmet", "testsRun", "summary"],
+  "properties": {
+    "approved": { "type": "boolean", "description": "True only if all criteria met with test evidence and no blocker/major findings" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "file", "summary", "evidence"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["blocker", "major", "note"] },
+          "file": { "type": "string" },
+          "summary": { "type": "string" },
+          "evidence": { "type": "string", "description": "Failing command, file:line, or concrete input demonstrating the problem" }
+        }
+      }
+    },
+    "criteriaUnmet": { "type": "array", "items": { "type": "string" }, "description": "Acceptance criteria lacking working code or regression-catching tests" },
+    "testsRun": { "type": "string", "description": "Commands run and their outcomes" },
+    "summary": { "type": "string", "description": "Two-sentence overall judgment" }
+  }
+}
