@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # fill-reviewer-prompt.sh <pr> [issue] — assemble the adversarial reviewer prompt (SKILL step 2).
 #
-# Fills {{PR_NUMBER}}, {{ISSUE_NUMBER}}, {{BRANCH}} and {{SKILL_DIR}} in reviewer-prompt.md and
-# prints the result. {{SKILL_DIR}} is the one that matters for portability: the skill may be
-# installed as a symlink under ~/.claude/skills, in the plugin cache, or checked into a repo, so
-# the reviewer can only find codex-review.sh if it is handed an absolute path. Never paste the
-# template into an Agent spawn by hand — an unfilled {{SKILL_DIR}} silently costs the codex
-# cross-check, and the reviewer will happily approve without ever noticing it was missing.
+# Fills {{PR_NUMBER}}, {{ISSUE_NUMBER}}, {{BRANCH}}, {{SKILL_DIR}}, the repo's verification
+# commands and {{REPO_NOTES}} in reviewer-prompt.md, and prints the result. {{SKILL_DIR}} is the
+# one that matters for portability: the skill may be installed as a symlink under
+# ~/.claude/skills, in the plugin cache, or checked into a repo, so the reviewer can only find
+# codex-review.sh if it is handed an absolute path. Never paste the template into an Agent spawn
+# by hand — an unfilled {{SKILL_DIR}} silently costs the codex cross-check, and unfilled repo
+# notes give you a reviewer that judges the diff against another project's conventions.
 #
 # The issue number defaults to the branch suffix (agent/issue-<n>), same as everywhere else.
 set -euo pipefail
@@ -23,7 +24,10 @@ case "$ISSUE" in
   ''|*[!0-9]*) die "could not derive an issue number from branch '$BRANCH' — pass it explicitly" ;;
 esac
 
-export PR_NUMBER="$PR" ISSUE_NUMBER="$ISSUE" BRANCH SKILL_DIR TEMPLATE
+REPO_NOTES="$(read_repo_notes)"
+
+export PR_NUMBER="$PR" ISSUE_NUMBER="$ISSUE" BRANCH SKILL_DIR TEMPLATE REPO_NOTES \
+       APP_LABEL APP_DIR INSTALL_CMD TEST_CMD LINT_CMD TYPECHECK_CMD
 
 python3 - <<'PY'
 import os, re, sys

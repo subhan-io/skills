@@ -11,28 +11,27 @@ Bundled resources: `implementer-prompt.md`, `reviewer-prompt.md`, `report-schema
 
 **Every path in this file is relative to this skill's own directory, not the repo you are dispatching in.** The skill is installed once per machine (symlinked into `~/.claude/skills/dispatch-agents`, or in the plugin cache) and runs against whatever repo is the cwd — so resolve `scripts/tick-state.sh` against the directory this SKILL.md was loaded from, and pass that absolute directory to any agent you spawn (see `scripts/fill-reviewer-prompt.sh`, which fills `{{SKILL_DIR}}` for you). Run the scripts from inside the target repo; they locate the repo through git, not through their own location.
 
-**Per-repo config.** Scripts read the Config values below from env, layered: built-in defaults (tuned for `subhan-io/subhanio-platform`) < `<repo-root>/.claude/dispatch-agents.env` < variables set on the command line. In any repo other than subhanio-platform, that env file is what makes the skill point at the right labels, app and base branch — if it's missing, say so and stop rather than dispatching against defaults that belong to a different project. Minimal file:
+**Per-repo config.** Scripts read the Config values below from env, layered: built-in defaults (tuned for `subhan-io/subhanio-platform`) < `<repo-root>/.claude/dispatch-agents.env` < variables set on the command line. That env file is what makes the skill point at the right labels, app, base branch and verification commands — **if it's missing, say so and stop** rather than dispatching against defaults that belong to a different project. `scripts/preflight.sh` checks it and everything it names; run that before the first tick in any repo (see "Onboarding a repo" below for the annotated template).
 
-```sh
-APP_LABEL=my-app
-PREVIEW_LABEL=deploy-preview:my-app
-BASE_BRANCH=main
-TRACKING_ISSUE=42
-```
+The file is `KEY=value` lines, **parsed, not sourced** — the command values are multi-word, so quoting them is optional and a stray line can't execute anything. Keys the skill doesn't know are ignored (preflight warns about them).
+
+Two things carry the repo-specific knowledge the prompt templates deliberately don't: the four command variables (`INSTALL_CMD`, `TEST_CMD`, `TYPECHECK_CMD`, `LINT_CMD` — anything mechanical), and `REPO_NOTES_FILE` → `.claude/dispatch-agents/repo-notes.md`, injected verbatim into both prompts as `{{REPO_NOTES}}` (anything procedural: database provisioning, screenshot harness, standards docs, off-limits suites). The templates keep only generic engineering discipline. A missing repo-notes file is a hard error in both fill scripts, never a silent empty section.
 
 | Script | Replaces | Notes |
 |---|---|---|
+| `scripts/preflight.sh [--quiet]` | discovering mid-tick that the repo was never set up | mechanical readiness checklist — tooling/auth, config file, `APP_DIR`, base branch on origin, every label, repo notes, `.claude/worktrees/` ignored, tracking issue open, codex seen, STOP absent. Exit 1 if any hard requirement fails; warnings are the documented-fallback cases. Read-only |
+| `scripts/setup-labels.sh [--dry-run]` | hand-creating seven labels with `gh label create` | idempotent; creates only what's missing from the *resolved* config names, never recolours an existing label |
 | `scripts/tick-state.sh` | all of steps 1–3's reads | one JSON blob: issues (blockers resolved, `dispatchable`, `staleClaimCandidate`), PRs (`classification`: conflict/pending/red/green with all the precedence rules encoded, `staleBehindMaster`, `orchestratorState`), recent merged agent PRs. Read-only; safe in dry runs |
 | `scripts/orch-state.sh get\|bump\|reset <pr> <key>` | orchestrator-state comment parsing/upserting | `bump` **exits 3 when the cap is already reached — that exit code IS the escalation signal**; never bypass it by editing the comment yourself |
 | `scripts/claim-issue.sh <n>` | step 4's claim + TOCTOU guard | atomically creates the `agent/issue-<n>` branch as the reservation (GitHub ref creation is atomic), then labels; exit 2 = lost the race, skip and note in summary |
-| `scripts/fill-prompt.sh <n>` | step 4's prompt assembly | fills every placeholder incl. sibling snapshot with files-claims; fails loudly on unfilled placeholders |
-| `scripts/fill-reviewer-prompt.sh <pr> [issue]` | hand-filling the reviewer template | fills PR/issue/branch **and `{{SKILL_DIR}}`**, the absolute path the reviewer needs to find `codex-review.sh` from inside a worktree |
+| `scripts/fill-prompt.sh <n>` | step 4's prompt assembly | fills every placeholder incl. sibling snapshot with files-claims, the four commands and `{{REPO_NOTES}}`; fails loudly on unfilled placeholders or a missing repo-notes file |
+| `scripts/fill-reviewer-prompt.sh <pr> [issue]` | hand-filling the reviewer template | fills PR/issue/branch, the commands, `{{REPO_NOTES}}` **and `{{SKILL_DIR}}`**, the absolute path the reviewer needs to find `codex-review.sh` from inside a worktree |
 | `scripts/worktree.sh <n>` | step 4's worktree creation | creates or inspects; never resets existing work — reports `dirty`/`unpushedCommits` so that stays a deliberate decision |
 | `scripts/codex-review.sh status\|request\|watch\|findings <pr>` | hand-rolled `@codex review` comments and guessing whether codex has finished | `status` → `not-requested\|awaiting\|arriving\|settled` for the PR's **current head commit** (decided by the `**Reviewed commit:**` sha in the review body, not timestamps); `request` posts the trigger (exit 5 = already requested); `watch` blocks until settled (exit 4 = timeout) — **always backgrounded**; `findings` → codex inline comments normalized to the verdict severities (P1 blocker / P2 major / P3 note) |
 | `scripts/validate-report.sh <file\|-> report\|verdict` | eyeballing agent output against the schemas | exit 2 = invalid; validate before posting |
 | `scripts/post-comment.sh (--pr\|--issue) <n> <role-tag> [--fence <block>]` | comment authorship + fenced-block formatting | body on stdin; `--fence agent-report` etc. validates JSON and wraps it |
 
-**Config defaults** (per-repo overrides go in `.claude/dispatch-agents.env`, not in this file; change the defaults only if the user asks): app label `resume-evaluator`, base branch `master`, ready label `ready-for-agent`, claim label `agent-in-progress`, human-queue label `agent:ready-for-review`, preview label `deploy-preview:resume-evaluator`, contracts bulletin issue `#220`, critical-path label `agent-critical-path` (human-created and applied; if it doesn't exist yet, fall back to schema-touching-only routing for the opus tier), conflict-escalation label `agent:merge-conflict` (human-created and applied to flag a PR that needs a human to resolve; if it doesn't exist, fall back to tick-summary-only escalation), branch prefix `agent/issue-`, max concurrent implementers **2**, max fix attempts **2**, max adversarial-review rounds **2**, max rebase/conflict attempts **2**, max `@codex review` requests per head commit **2**.
+**Config defaults** (per-repo overrides go in `.claude/dispatch-agents.env`, not in this file; change the defaults only if the user asks): app label `resume-evaluator`, app dir `apps/<APP_LABEL>` (`.` in a single-package repo), base branch `master`, ready label `ready-for-agent`, claim label `agent-in-progress`, human-queue label `agent:ready-for-review`, preview label `deploy-preview:<APP_LABEL>`, contracts bulletin issue `#220`, repo notes `.claude/dispatch-agents/repo-notes.md`, install `pnpm install --frozen-lockfile`, test `pnpm --dir <APP_DIR> test`, typecheck `pnpm typecheck --filter=<APP_LABEL>`, lint `pnpm lint --filter=<APP_LABEL> -- --max-warnings=0`, critical-path label `agent-critical-path` (not configurable — the model routing keys on the name; human-created and applied, and if it doesn't exist yet, fall back to schema-touching-only routing for the opus tier), conflict-escalation label `agent:merge-conflict` (human-created and applied to flag a PR that needs a human to resolve; if it doesn't exist, fall back to tick-summary-only escalation), branch prefix `agent/issue-`, max concurrent implementers **2**, max fix attempts **2**, max adversarial-review rounds **2**, max rebase/conflict attempts **2**, max `@codex review` requests per head commit **2**.
 
 **Codex review** (config lives in `scripts/codex-review.sh`, override via env): bot `chatgpt-codex-connector[bot]`, trigger comment `@codex review`, settle window `CODEX_SETTLE_SECONDS=120`, watch timeout `CODEX_TIMEOUT_SECONDS=900`, poll interval `CODEX_POLL_SECONDS=30`. Codex is *not* a GitHub check — there is no run to wait on and nothing in `gh pr checks` will ever reflect it. You post the trigger, the review lands minutes later as a PR review plus inline comments, and the only way to know it finished is that codex has gone quiet for the settle window. Greptile is gone (trial expired; it now only posts "Reactivate Greptile" review stubs) — codex replaces it as the reviewer's cross-check.
 
@@ -51,6 +50,60 @@ Applying effort: the Agent tool has no per-spawn effort override (subagents inhe
 **Kill switch:** check for `<repo-root>/.claude/dispatch-agents.STOP` at the start of *every* invocation — including harvest re-invocations triggered by completion notifications — and if it exists, report that and do nothing. STOP blocks new work only (spawns, claims, comments); it cannot halt agents already running in the background.
 
 **Arguments** (space-separated, combinable): `dry` — perform every read and print every action you *would* take (claims, spawns, comments, labels) but execute none of them. In dry mode the read-only scripts (`tick-state.sh`, `orch-state.sh get`, `fill-prompt.sh`, `validate-report.sh`, `codex-review.sh status|findings`) are fine; never run the mutating ones (`claim-issue.sh`, `orch-state.sh bump|reset`, `worktree.sh`, `post-comment.sh`, `codex-review.sh request`) and don't arm `codex-review.sh watch` — a dry tick reports what codex state it found and what it would trigger, and waits for nothing. `teams` / `no-teams` — force the execution mode below.
+
+## Onboarding a repo
+
+Once per repo, before the first tick. Steps are ordered because each one's output is the next one's input; `preflight.sh` is both the map and the acceptance test.
+
+1. **`scripts/preflight.sh`** — it will fail. Read the FAIL lines as the to-do list; everything below is just working through them.
+
+2. **Write `<repo-root>/.claude/dispatch-agents.env`.** Every value is a decision, so make it deliberately rather than copying:
+
+   ```sh
+   APP_LABEL=my-app                        # ANDed with the ready/claim labels on every issue query:
+                                           # an issue without it is invisible. Plain, single word —
+                                           # it is interpolated into shell commands and DB names,
+                                           # so no spaces and no colons.
+   APP_DIR=apps/my-app                     # app package dir, relative to repo root; `.` if single-package
+   BASE_BRANCH=main                        # must exist on origin — claims cut branches from its head
+   TRACKING_ISSUE=42                       # contracts bulletin: where agents post cross-cutting decisions
+
+   READY_LABEL=ready-for-agent
+   CLAIM_LABEL=agent-in-progress
+   REVIEW_LABEL=agent:ready-for-review
+   PREVIEW_LABEL=deploy-preview:my-app
+   CONFLICT_LABEL=agent:merge-conflict
+
+   # Verification commands, each runnable as-is from a worktree root. Read package.json rather
+   # than assuming: a `test` script that means WATCH mode will hang an agent until it times out.
+   INSTALL_CMD=pnpm install --frozen-lockfile
+   TEST_CMD=pnpm test:run
+   TYPECHECK_CMD=pnpm typecheck
+   LINT_CMD=pnpm lint
+
+   REPO_NOTES_FILE=.claude/dispatch-agents/repo-notes.md
+   BRANCH_PREFIX=agent/issue-
+   MAX_ATTEMPTS=2
+   ```
+
+3. **`scripts/setup-labels.sh`** (`--dry-run` first) — creates whatever of the seven the repo is missing, using the names you just configured.
+
+4. **Apply `APP_LABEL` to the issues that should be in scope.** This is the on/off switch for the whole pipeline; an issue that isn't labeled is one the dispatcher will never see, which is exactly what you want for anything not yet triaged.
+
+5. **Write `<repo-root>/.claude/dispatch-agents/repo-notes.md`** — the highest-leverage step, and the one that can't be templated. This is the agent writing its own future reference: it is injected verbatim into every implementer and reviewer prompt, and it is the *only* place repo-specific procedure now lives. **Produce it by investigating the repo, not by guessing** — read `package.json` scripts (which one is watch mode? what does `check` actually run?), the test setup file (what does it pin, what does it refuse), the CI workflow files (which suites run where, gated on what), `CLAUDE.md` and any standards docs, the schema and migration layout, and any existing dev/preview harness route. Cover, at minimum:
+
+   1. **Verification gates** — anything beyond the four command vars: extra checks, gotchas that make a command lie (a lint config that exits 0 on violations), suites that are off-limits to agents and *why* (shared ports, shared databases), and what CI covers instead.
+   2. **Database procedure** — exactly how an agent provisions an isolated scratch database, the naming scheme that keeps two agents from colliding, and the explicit rule about which URLs are off-limits.
+   3. **UI screenshot procedure** — where the harness route goes and which existing file to mirror, how to seed data without mocking the network, the dev-server command and the port rule, teardown.
+   4. **Standards docs** — the paths an agent must read before writing code.
+   5. **Media upload** — how a screenshot gets a public URL for the PR body.
+   6. **Anything an implementer or reviewer would otherwise get wrong** — mocking conventions, error-handling conventions at boundaries, the class of bug that has historically been P0 here.
+
+   Write reasoning, not just commands: a rule whose *why* is recorded survives contact with a situation it didn't anticipate. When an agent learns something the hard way, it goes back into this file.
+
+6. **Re-run `scripts/preflight.sh` until it is clean.** Warnings are acceptable (they name their fallback); failures are not.
+
+7. **First tick with `dry`** — `/dispatch-agents dry` performs every read and prints every claim, spawn and comment it *would* make. Check it selected the issues you expected before letting it mutate anything.
 
 ## Execution mode: classic spawns vs agent teams
 
@@ -116,10 +169,10 @@ Any PR with `staleBehindMaster: true` in the tick-state snapshot needs rebasing 
 
 Attempts live in the same orchestrator-state ledger, keyed `rebaseAttempts` — updated by the *dispatcher only* (rebase agents never touch it, they just report). Run `scripts/orch-state.sh bump <pr> rebaseAttempts` **at spawn time**, before the rebase agent runs, so an agent that dies or aborts without reporting still consumed an attempt. Exit 3 means the cap is already reached: stop auto-rebasing that PR — add `agent:merge-conflict` if the label exists (otherwise just note it prominently in the tick summary) and escalate to the human instead of retrying every tick.
 
-Rebase agent instructions: `git fetch origin`. If the worktree has uncommitted changes, skip and escalate — another agent may be mid-work. Otherwise hard-reset the worktree to `origin/agent/issue-<n>` (this pulls in any commits a human pushed between ticks — never rebase a stale local HEAD, since `--force-with-lease` compares against the *updated* remote-tracking ref and would silently discard them). **Every verification command (install, test, typecheck, lint) must run from paths inside the PR's worktree** — never from the main repo checkout, whose green results certify the base branch, not the rebased branch; use `pnpm --dir <worktree>/...` or `cd` into the worktree app dir for each command. Then rebase onto `origin/<base branch>`:
+Rebase agent instructions: `git fetch origin`. If the worktree has uncommitted changes, skip and escalate — another agent may be mid-work. Otherwise hard-reset the worktree to `origin/agent/issue-<n>` (this pulls in any commits a human pushed between ticks — never rebase a stale local HEAD, since `--force-with-lease` compares against the *updated* remote-tracking ref and would silently discard them). **Every verification command (the configured `INSTALL_CMD`/`TEST_CMD`/`TYPECHECK_CMD`/`LINT_CMD`) must run from paths inside the PR's worktree** — never from the main repo checkout, whose green results certify the base branch, not the rebased branch; `cd` into the worktree first, don't rely on the shell's cwd surviving. Then rebase onto `origin/<base branch>`:
 
-- **Clean rebase (no conflicts)** → re-run the app's tests/lint/typecheck, force-push `--force-with-lease`, report success.
-- **Conflicts arise** → resolve them file by file, preserving the intent of both changes (read the merged PR diff and #220 contract comments to understand what the base branch side was doing). Favor whichever side's change is narrower in scope only when the two are genuinely equivalent — never silently drop one side's logic to make the diff simpler.
+- **Clean rebase (no conflicts)** → re-run those commands, force-push `--force-with-lease`, report success.
+- **Conflicts arise** → resolve them file by file, preserving the intent of both changes (read the merged PR diff and the contract comments on the tracking issue to understand what the base branch side was doing). Favor whichever side's change is narrower in scope only when the two are genuinely equivalent — never silently drop one side's logic to make the diff simpler.
   - If resolvable on the merits → re-run tests/lint/typecheck (a conflict resolution that doesn't compile or breaks tests isn't resolved), force-push `--force-with-lease`, and report exactly what was resolved and why in the completion report so the orchestrator can post it as a PR comment ending `(rebase agent)`.
   - If a hunk is genuinely ambiguous (both sides changed the same contract in incompatible ways and picking one requires a product/architecture call, not just a merge of intent) → run `git rebase --abort`, leave the branch untouched, and report the conflict as unresolved with the specific file(s)/hunk(s) and why it's ambiguous. Never guess on a semantic conflict just to get a green rebase.
 When the rebase agent's completion report arrives, the dispatcher reconciles the ledger: a **successful** rebase runs `scripts/orch-state.sh reset <pr> rebaseAttempts` (the cap is about repeated *failures*, not lifetime rebase count); a failure leaves the spawn-time increment standing.
@@ -143,7 +196,7 @@ Fill free slots (max concurrent = 2, counting in-flight implementers plus open a
 ## Hard rules
 
 - **Never merge a PR.** The human's merge click is the only enforced gate in this repo.
-- **Never run `db:push`** against dev/prod. Scratch-DB verification rules live in the implementer prompt.
+- **Never run a schema push against a shared dev or prod database.** The scratch-DB provisioning procedure is the repo's own, in `REPO_NOTES_FILE`, and reaches agents through `{{REPO_NOTES}}`.
 - Subagents get worktrees; never let two agents share one simultaneously. Phases are ordered so fix/review/rebase agents on the same PR don't overlap — respect that.
 - Spawn independent agents in parallel (one message, multiple Agent calls); end your turn after dispatching rather than polling — completion notifications re-invoke you.
 - Comment authorship and the caps marker are defined in step 2 — orchestrator comments end `(orchestrator)`, subagent comments end with their role tag, and only ```json orchestrator-state``` counts toward attempt/round caps (`fixAttempts`, `reviewRounds`, `rebaseAttempts`, `codexRequests`). The one exception is the bare `@codex review` trigger, which carries no tag because the connector matches on the comment body.
