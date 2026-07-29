@@ -72,3 +72,18 @@ works for a one-off. Kill switch: `touch .claude/dispatch-agents.STOP` in the ta
 The prompts still assume a pnpm monorepo with `pnpm test` / `typecheck --filter=<app>` /
 `lint --filter=<app>`; adapting them to a different toolchain means editing
 `implementer-prompt.md` and `reviewer-prompt.md`, not just the env file.
+
+### pr-media-upload
+
+Uploads a screenshot, GIF or screen recording to a public S3 bucket and prints a permanent URL, so
+an agent can embed media in a GitHub PR description. Agents can't use GitHub's drag-drop attachment
+uploader — that needs a browser session, not a token — so hosting the file and embedding the URL is
+the only route. `upload.sh <file>` writes just the URL to stdout, so `url=$(upload.sh shot.png)`
+is safe.
+
+Requires `infisical` (logged in) and the `aws` CLI. Credentials for the write-only uploader IAM
+user come from Infisical, passed with an explicit `--projectId`/`--path`, so the skill works from
+any repo regardless of that repo's own `.infisical.json`. No per-repo config.
+
+Uploads are **public and permanent** — no expiry, and the scoped creds can't delete. Never upload
+anything secret or personal.
