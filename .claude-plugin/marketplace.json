@@ -14,6 +14,15 @@
       "description": "Run one dispatcher tick over a repo's agent pipeline: shepherd agent PRs through checks, codex review and adversarial review, rebase after merges, and dispatch ready issues to background implementers in isolated worktrees.",
       "author": { "name": "Subhan Mahmood" },
       "keywords": ["orchestration", "github", "code-review", "agents"]
+    },
+    {
+      "name": "pr-media-upload",
+      "source": "./",
+      "skills": ["./skills/pr-media-upload"],
+      "strict": false,
+      "description": "Upload a screenshot, GIF or screen recording to a public S3 bucket and get a permanent URL to embed in a GitHub PR description, issue or comment.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["github", "screenshots", "s3", "pull-requests"]
     }
   ]
 }

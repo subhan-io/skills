@@ -2,6 +2,10 @@
 # fill-prompt.sh <issue> — assemble the implementer prompt (SKILL step 4.2).
 # Fetches the issue, builds the sibling snapshot (in-flight agent PR issues + their
 # files-claim blocks), and fills every {{PLACEHOLDER}} in implementer-prompt.md. Prints to stdout.
+#
+# The template carries only generic engineering discipline; everything repo-specific arrives
+# through the four command vars, {{APP_DIR}}, and {{REPO_NOTES}} (the repo's own operating
+# manual, injected verbatim). A missing repo-notes file is fatal here, not papered over.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need python3
@@ -34,12 +38,16 @@ for s in $sibling_issues; do
 done
 [ -n "$siblings" ] || siblings="(none in flight)"
 
+REPO_NOTES="$(read_repo_notes)"
+
 export ISSUE_NUMBER="$N" \
        ISSUE_TITLE="$(echo "$issue_json" | jq -r .title)" \
        ISSUE_BODY="$(echo "$issue_json" | jq -r '.body // ""')" \
        BRANCH="${BRANCH_PREFIX}${N}" \
        SIBLINGS="$siblings" \
-       APP_LABEL TRACKING_ISSUE PREVIEW_LABEL BASE_BRANCH TEMPLATE
+       REPO_NOTES \
+       APP_LABEL APP_DIR TRACKING_ISSUE PREVIEW_LABEL BASE_BRANCH TEMPLATE \
+       INSTALL_CMD TEST_CMD LINT_CMD TYPECHECK_CMD
 
 python3 - <<'PY'
 import os, re, sys
