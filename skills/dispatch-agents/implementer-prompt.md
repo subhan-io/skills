@@ -58,7 +58,7 @@ The app package lives at `{{APP_DIR}}` (relative to the repo root).
 8. **Open the PR.** Single-line commit messages. Then:
    - `gh pr create --base {{BASE_BRANCH}} --title "<conventional title> (#{{ISSUE_NUMBER}})" --body-file <file>`
    - PR body: what changed and why, an acceptance-criteria checklist mirroring the issue with evidence per item (test name or file:line), and any decisions you made that a reviewer should scrutinize.
-   - Apply the preview label: `gh pr edit <pr> --add-label "{{PREVIEW_LABEL}}"`
+   - Wait for the PR's initial CI run to finish before labeling: `gh pr checks <pr> --watch` (a `labeled` event fired while a required check's run is still queued or in progress cancels that run via the workflow concurrency group, and the cancelled check permanently blocks the merge even after a later green run). Only then apply the preview label: `gh pr edit <pr> --add-label "{{PREVIEW_LABEL}}"`
    - Link the issue with "Closes #{{ISSUE_NUMBER}}" in the body.
 
 9. **Report.** Your final structured output must follow the provided schema: every acceptance criterion with met/evidence, all files touched, schemaTouched (and scratch DB name), screenshot URLs, the PR number, confidence, and anything you punted on in notes.
