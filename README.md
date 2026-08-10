@@ -73,6 +73,26 @@ The prompts still assume a pnpm monorepo with `pnpm test` / `typecheck --filter=
 `lint --filter=<app>`; adapting them to a different toolchain means editing
 `implementer-prompt.md` and `reviewer-prompt.md`, not just the env file.
 
+### ship-issue
+
+Takes **one** named issue end to end and stops with a PR ready for you to merge:
+fresh worktree off the current default-branch tip → opus planner (chunked to ~200k tokens per
+session) → **approval gate** → sonnet implementer → PR → codex review → opus resolver, max two
+resolve rounds. `/ship-issue https://github.com/owner/repo/issues/12`, or just `12`.
+
+The sibling of `dispatch-agents`, not a replacement: that one sweeps a whole board unattended off
+labels, this one runs a single issue with you in the loop and never writes code before you have
+approved the plan. It never merges.
+
+**No per-repo config.** Default branch, package manager and verification commands are detected;
+whatever detection can't establish comes back as a warning to raise with you rather than a
+silent assumption. Requires `gh` (authenticated), `jq`, `git`, and the
+[Codex GitHub app](https://chatgpt.com/codex) on the repo — setup warns if it sees no sign of it
+rather than letting the review step hang for 15 minutes.
+
+Worktrees land in `.claude/worktrees/ship-issue-<n>` on `ship/issue-<n>` — deliberately not
+`agent/issue-<n>`, so `dispatch-agents` in the same repo doesn't adopt the branch as its own.
+
 ### pr-media-upload
 
 Uploads a screenshot, GIF or screen recording to a public S3 bucket and prints a permanent URL, so
