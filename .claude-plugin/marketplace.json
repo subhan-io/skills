@@ -16,6 +16,15 @@
       "keywords": ["orchestration", "github", "code-review", "agents"]
     },
     {
+      "name": "ship-issue",
+      "source": "./",
+      "skills": ["./skills/ship-issue"],
+      "strict": false,
+      "description": "Take one named GitHub issue end to end in a fresh worktree: plan with opus, stop for approval, implement with sonnet, open a PR, run it through Codex review, and resolve findings with opus — leaving a green PR for the human to merge.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["github", "issues", "code-review", "agents", "worktree"]
+    },
+    {
       "name": "pr-media-upload",
       "source": "./",
       "skills": ["./skills/pr-media-upload"],
