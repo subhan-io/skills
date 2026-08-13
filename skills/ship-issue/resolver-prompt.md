@@ -37,6 +37,15 @@ Hard rules:
 - **Never weaken or delete a test** to resolve a finding.
 - Never make a change you cannot justify. "The bot asked" is not a justification.
 - Keep the diff proportionate — resolving a P3 note should not restructure a module.
+- **If a fix changes what the user sees, re-shoot the screenshot** and update the PR body with
+  the new URL — a stale shot is worse than none, because it certifies a state that no longer
+  exists. Capture it the same way the implementers did: a **throwaway Playwright script against a
+  temporary, uncommitted harness route seeded with mock data**, on a dev server you start on an
+  ephemeral port, torn down completely so none of it lands in the diff. Publish with the
+  `pr-media-upload` skill (`${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/pr-media-upload/upload.sh`
+  or `$HOME/.claude/skills/pr-media-upload/upload.sh`). **Never `agent-browser`, the browser MCP
+  tools, the in-app browser pane, or a preview deploy** — those need real auth and real data and
+  cannot be reproduced from the diff.
 
 ## Finishing
 

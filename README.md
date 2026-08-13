@@ -77,8 +77,19 @@ The prompts still assume a pnpm monorepo with `pnpm test` / `typecheck --filter=
 
 Takes **one** named issue end to end and stops with a PR ready for you to merge:
 fresh worktree off the current default-branch tip → opus planner (chunked to ~200k tokens per
-session) → **approval gate** → sonnet implementer → PR → codex review → opus resolver, max two
-resolve rounds. `/ship-issue https://github.com/owner/repo/issues/12`, or just `12`.
+session) → **approval gate** → one sonnet implementer per chunk, run in order → PR → codex review
+→ opus resolver, max two resolve rounds. `/ship-issue https://github.com/owner/repo/issues/12`,
+or just `12`.
+
+The chunks are real agent boundaries, not headings in a document: each chunk gets a fresh session
+sized to its own context budget, hands the next one a written report of what it actually did, and
+has to leave the build green before the next starts.
+
+UI chunks ship with screenshots, captured one way only: a **throwaway Playwright script against a
+temporary harness route seeded with mock data**, torn down so none of it reaches the diff, then
+published through `pr-media-upload` and embedded in the PR body. Not `agent-browser`, not the
+browser MCP tools, not a preview deploy — those need real auth and real data, so the shot can't be
+reproduced from the diff by anyone else.
 
 The sibling of `dispatch-agents`, not a replacement: that one sweeps a whole board unattended off
 labels, this one runs a single issue with you in the loop and never writes code before you have

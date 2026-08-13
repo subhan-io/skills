@@ -29,18 +29,38 @@ things, not vibes: how many files the chunk opens, how large they are, how much 
 writes, how many test runs it takes to converge. A chunk that has to hold the whole schema plus
 six call sites in mind is too big; split it.
 
-Each chunk must be **independently verifiable** — it ends with the repo in a state where the
-test/typecheck/lint commands pass. Never split so that chunk 1 leaves the build broken until
-chunk 2 lands. If the work genuinely cannot be split that way, say so and explain why rather
-than inventing a false seam.
+**Each chunk is executed by its own agent, in a fresh session, with no memory of the others.**
+That is what the sizing is for — the boundaries are real context resets, not headings. Two
+consequences you have to plan around:
+
+- **A chunk must stand alone.** Its agent gets your chunk text, a summary of the whole change,
+  and handoff notes from the chunks before it — nothing else of yours. Name exact file paths,
+  function names, and the existing patterns to follow. "Update the callers" is useless to someone
+  who wasn't there when you found them; list them.
+- **A chunk must end green** — test/typecheck/lint all passing, so the worktree is safe to hand
+  to a stranger. Never split so that chunk 1 leaves the build broken until chunk 2 lands. If the
+  work genuinely cannot be split that way, say so and explain why rather than inventing a false
+  seam; one honest large chunk beats two that only work if the same agent does both.
+
+Fewer, well-sized chunks beat many small ones: every boundary costs a fresh agent re-reading the
+codebase. Split where the context actually gets heavy, not to make the plan look tidy.
+
+**A chunk that touches user-visible code also has to produce screenshots**, which is real work:
+a temporary harness route rendering the changed component, fixture data seeded into the app's
+query cache, a dev server, a throwaway Playwright script, then tearing all of it down. Budget for
+it in that chunk's estimate, and note which existing dev-route and fixture patterns the agent
+should mirror — you have read the code and they have not.
 
 Return a plan with:
 
-1. **Summary** — what changes, in two or three sentences.
-2. **Chunks**, in order. For each: a title, the files it touches, what it does, how it is
-   verified, and your context estimate with the reasoning behind it.
+1. **Summary** — what changes, in two or three sentences. This is handed to every chunk agent as
+   their only picture of the whole.
+2. **Chunks**, numbered, in order. For each: a title, the files it touches, what it does, how it
+   is verified, what the chunks before it will have left in place that it depends on, and your
+   context estimate with the reasoning behind it.
 3. **Risks and ambiguities** — anything you had to assume, anything that could break outside the
    files you listed, any existing behaviour the change would alter.
 4. **Out of scope** — what you deliberately are not doing, so the reviewer does not flag it.
 
-Be concrete about file paths and function names. The next agent has none of your context.
+Be concrete about file paths and function names throughout. None of the agents that execute this
+have any of your context.
