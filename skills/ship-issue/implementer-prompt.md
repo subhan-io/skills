@@ -88,7 +88,11 @@ the diff alone by someone who is not you.
 **Do not use a preview deploy either.** Deployment-protection redirects fight bypass cookies and
 preview builds lag the push; it burns sessions and the shot ends up certifying the wrong commit.
 
-The procedure:
+The procedure — but first, **check you can publish before you capture**: resolve `upload.sh` (step
+5) and confirm `infisical` and `aws` are on `PATH`. Ten seconds up front beats building a harness,
+taking the shots, and only then finding there is nowhere to send them. If publishing is
+unavailable, say so in your report and skip the capture rather than producing images no one will
+see.
 
 1. **A temporary, uncommitted, dev-only harness route** that renders *only* the component(s) you
    changed, inside their real providers — not the whole authenticated app shell. Mirror whatever
@@ -109,11 +113,10 @@ The procedure:
    - If a shot comes back blank or mid-skeleton, **wait on a real selector**, never a sleep.
    - Never retry a failed browser launch in a loop. If Chromium is missing, install it once, then
      report the failure if it still won't start.
-5. **Tear all of it down.** Kill the dev server; delete the script, the images, and the harness
-   route. **None of it may appear in the PR diff** — it exists only to render your component in a
-   real browser. Your actual tests are the coverage; the screenshot is evidence for the human.
-6. **Publish each shot** with the `pr-media-upload` skill, which uploads to a public bucket and
-   echoes one line — the URL — to stdout. Resolve it by install path:
+5. **Publish each shot, before you delete anything.** The URL is the only part of the capture
+   that survives; a deleted PNG cannot be uploaded and the shot has to be retaken from scratch.
+   Use the `pr-media-upload` skill, which uploads to a public bucket and echoes one line — the
+   URL — to stdout. Resolve it by install path:
 
    ```sh
    upload=$(ls "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/pr-media-upload/upload.sh" \
@@ -121,9 +124,13 @@ The procedure:
    url=$("$upload" ./shot-desktop.png)
    ```
 
-   Put the URLs in your report — the orchestrator embeds them in the PR body. Images go in as
-   `![alt](url)`; video (`.mp4/.mov/.webm`) as a raw `<video src="url" controls width="640">`
-   tag on its own line.
+   Record every URL before moving on. They go in your report, and the orchestrator embeds them in
+   the PR body — images as `![alt](url)`, video (`.mp4/.mov/.webm`) as a raw
+   `<video src="url" controls width="640">` tag on its own line.
+6. **Then tear all of it down.** Kill the dev server; delete the script, the images, and the
+   harness route. **None of it may appear in the PR diff** — it exists only to render your
+   component in a real browser. Your actual tests are the coverage; the screenshot is evidence
+   for the human.
 
 If you genuinely cannot produce the state — it depends on server data you cannot fixture — say so
 explicitly in your report as **un-capturable**, and say why. Never let the screenshots quietly go

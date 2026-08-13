@@ -97,6 +97,27 @@ codex_seen=$(gh api "repos/$SLUG/pulls/comments?per_page=100" \
 [ "${codex_seen:-0}" -eq 0 ] \
   && WARN+=("no codex review comments found in $SLUG — the Codex GitHub app may not be installed; the review step will time out")
 
+# Screenshot publishing. A UI chunk captures with Playwright and then has to publish through
+# pr-media-upload — a separate plugin needing `infisical` and `aws` on PATH plus credentials.
+# Discovering that at the publish step means the whole capture is wasted, so check it up front
+# and let the human decide (install the deps, or accept UI chunks reporting un-capturable).
+UPLOAD=""
+for _p in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/pr-media-upload/upload.sh" \
+          "$HOME/.claude/skills/pr-media-upload/upload.sh" \
+          "$HOME/.claude/plugins"/*/skills/pr-media-upload/upload.sh; do
+  [ -x "$_p" ] && { UPLOAD="$_p"; break; }
+done
+if [ -z "$UPLOAD" ]; then
+  WARN+=("pr-media-upload not found — UI chunks will have nowhere to publish screenshots; install the plugin or expect them to report un-capturable")
+else
+  _missing=()
+  for _bin in infisical aws; do
+    command -v "$_bin" >/dev/null 2>&1 || _missing+=("$_bin")
+  done
+  [ ${#_missing[@]} -gt 0 ] \
+    && WARN+=("pr-media-upload found at $UPLOAD but ${_missing[*]} not on PATH — screenshot publishing will fail after the capture work is already done")
+fi
+
 # Worktrees live under .claude/worktrees/; committing one is never intended.
 if ! git -C "$ROOT" check-ignore -q .claude/worktrees 2>/dev/null; then
   WARN+=(".claude/worktrees/ is not gitignored — add it before creating worktrees")

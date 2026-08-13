@@ -101,6 +101,12 @@ silent assumption. Requires `gh` (authenticated), `jq`, `git`, and the
 [Codex GitHub app](https://chatgpt.com/codex) on the repo — setup warns if it sees no sign of it
 rather than letting the review step hang for 15 minutes.
 
+Screenshots additionally need the `pr-media-upload` plugin and its own prerequisites (`infisical`
+and `aws` on `PATH`, with credentials). Setup checks for these too and warns up front, because
+the alternative is an agent finishing a whole capture and only then discovering it has nowhere to
+publish. Without them a repo with no UI work is unaffected; UI work reports its shots
+un-capturable.
+
 Worktrees land in `.claude/worktrees/ship-issue-<n>` on `ship/issue-<n>` — deliberately not
 `agent/issue-<n>`, so `dispatch-agents` in the same repo doesn't adopt the branch as its own.
 

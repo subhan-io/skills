@@ -58,6 +58,11 @@ undetectable toolchain, or no sign of the Codex app in this repo each change wha
 next — **surface them to the user; never paper over them.** The script deliberately never resets
 an existing worktree: whether to build on prior work or discard it is the human's call.
 
+A warning about `pr-media-upload` (missing plugin, or `infisical`/`aws` not on `PATH`) matters
+only if this issue touches UI — raise it then, before planning, since the alternative is an agent
+completing a whole capture and finding it has nowhere to publish. The human either installs the
+prerequisites or accepts that UI chunks will report their shots un-capturable.
+
 ### 2. Plan — opus subagent
 
 Spawn a background Agent with `model: "opus"`, given `planner-prompt.md` with every `{{...}}`
