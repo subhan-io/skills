@@ -58,6 +58,9 @@ branch, not your branch — `cd` in, don't rely on the shell's cwd surviving bet
 A command listed as `null` was not detected — find the real one (read `package.json` scripts,
 the CI workflow, the Makefile) rather than skipping the gate silently.
 
+The skill driving this run lives at `{{SKILL_DIR}}` — that is where the files referenced below
+are, and it is not the repo you are changing. Nothing you write ever goes there.
+
 ## How to work
 
 The plan is a plan, not a contract. If implementing reveals it was wrong — a file that doesn't
@@ -156,34 +159,19 @@ missing, and never substitute a live-browser shot because the harness was inconv
 
 ## Hand off to the next chunk
 
-The agent that runs chunk {{CHUNK_NUMBER}}+1 starts from zero: fresh session, none of your
-context, only what you write down. So finish by **invoking the `handoff` skill** (`Skill` tool,
-name `handoff`) to compact this session into a handoff document, passing an argument that names
-what the next session does — e.g. `implementing the next chunk of issue #{{ISSUE_NUMBER}} in
-worktree {{WORKTREE}}`. If you were the last chunk ({{CHUNK_NUMBER}} of {{CHUNK_TOTAL}}), say
-instead that the next session opens the PR, and write the document for that reader.
+The agent that runs the chunk after yours starts from zero: fresh session, none of your context,
+only what you write down. So finish by writing it a handoff document.
 
-The skill saves the document to the OS temp directory — leave it there, it must not land in the
-diff — and its own rules apply: reference the plan, the issue and your commits by path or URL
-instead of restating them, and redact anything sensitive. On top of that, the document has to
-carry the things only you know:
+**Read `{{SKILL_DIR}}/handoff-prompt.md` and follow it.** It says where the document goes, what it
+must contain, and how to write for a reader who was not here. It also says to invoke the `handoff`
+skill (`Skill` tool, name `handoff`) when that skill is installed and let it do the writing —
+prefer that, then check the result against the required sections. When it is not installed, the
+bundled instructions are the whole method; the document comes out the same either way.
 
-- **Done** — what you actually built, in terms of files and function names.
-- **Deviations** — where you diverged from the plan, and why.
-- **Verification** — the commands you ran and what they actually printed. Not "tests pass".
-- **Screenshots** — the published URLs, each labelled with what it shows. If your chunk touched
-  UI and there are none, say why in the words `un-capturable:` followed by the reason.
-- **For the next chunk** — anything that changes their assumptions: interfaces you introduced or
-  renamed, a helper worth reusing, a file that turned out to be structured differently than the
-  plan describes, a gotcha that cost you time.
-- **Stopped early?** Say exactly where and why, and what state the worktree is in.
-
-Then read the file back and confirm it stands alone for someone who was not here. A handoff that
-only makes sense to you is the same as no handoff.
-
-If the `handoff` skill is not installed in this environment, write the same document yourself to
-`${TMPDIR:-/tmp}/ship-issue-{{ISSUE_NUMBER}}-chunk-{{CHUNK_NUMBER}}-handoff.md` and say in your
-report that you wrote it by hand rather than through the skill.
+Either way, frame the document around what the next session does — `implementing the next chunk of
+issue #{{ISSUE_NUMBER}} in worktree {{WORKTREE}}` — which is also the argument to pass the skill
+if you invoke it. If you were the last chunk ({{CHUNK_NUMBER}} of {{CHUNK_TOTAL}}), the next
+session opens the PR instead; say so, and write for that reader.
 
 ## Report back
 
