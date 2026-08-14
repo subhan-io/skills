@@ -118,6 +118,19 @@ else
     && WARN+=("pr-media-upload found at $UPLOAD but ${_missing[*]} not on PATH — screenshot publishing will fail after the capture work is already done")
 fi
 
+# Chunk-to-chunk continuity is written with the `handoff` skill. Its absence is not fatal — the
+# implementer prompt falls back to writing the same document by hand — but the human should know
+# the handoffs will be improvised rather than produced by the skill they expect.
+HANDOFF=""
+for _p in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/handoff/SKILL.md" \
+          "$ROOT/.claude/skills/handoff/SKILL.md" \
+          "$HOME/.claude/skills/handoff/SKILL.md" \
+          "$HOME/.claude/plugins"/*/skills/handoff/SKILL.md; do
+  [ -f "$_p" ] && { HANDOFF="$_p"; break; }
+done
+[ -z "$HANDOFF" ] \
+  && WARN+=("handoff skill not found — chunk implementers will fall back to writing their handoff document by hand instead of invoking it")
+
 # Worktrees live under .claude/worktrees/; committing one is never intended.
 if ! git -C "$ROOT" check-ignore -q .claude/worktrees 2>/dev/null; then
   WARN+=(".claude/worktrees/ is not gitignored — add it before creating worktrees")

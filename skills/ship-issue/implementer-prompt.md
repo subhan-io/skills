@@ -19,10 +19,17 @@ All chunks, so you can see where yours sits:
 
 {{PREVIOUS_CHUNKS}}
 
-These are handoff reports from the agents that ran before you — what they actually did, which can
-differ from what the plan said they would. **Where a report and the plan disagree, the report
-wins**: it describes the repo you are about to open. Verify anything load-bearing by reading the
-code rather than trusting either.
+Those are handoff documents, one per chunk that ran before you, oldest first — each written by
+that chunk's agent for whoever came next, which is you. **Read all of them before you touch
+code.** They are the only continuity you get, and the last one was written for your chunk
+specifically.
+
+They describe what those agents actually did, which can differ from what the plan said they would.
+**Where a handoff and the plan disagree, the handoff wins**: it describes the repo you are about
+to open. Verify anything load-bearing by reading the code rather than trusting either.
+
+If one of the paths is missing or unreadable, **stop and report that** rather than working around
+the gap — you would be building on a chunk whose actual shape nobody can tell you.
 
 If this says nothing landed yet, you are the first chunk and the worktree is a clean cut of
 `origin/{{BASE_BRANCH}}`.
@@ -147,8 +154,19 @@ missing, and never substitute a live-browser shot because the harness was inconv
 5. **Do not open or merge a PR**, and do not post the `@codex review` trigger. The orchestrator
    opens the PR once every chunk is in.
 
-Then report back. Your report is the only thing the next chunk's agent will know about your work,
-so write it for them, not for a status update:
+## Hand off to the next chunk
+
+The agent that runs chunk {{CHUNK_NUMBER}}+1 starts from zero: fresh session, none of your
+context, only what you write down. So finish by **invoking the `handoff` skill** (`Skill` tool,
+name `handoff`) to compact this session into a handoff document, passing an argument that names
+what the next session does — e.g. `implementing the next chunk of issue #{{ISSUE_NUMBER}} in
+worktree {{WORKTREE}}`. If you were the last chunk ({{CHUNK_NUMBER}} of {{CHUNK_TOTAL}}), say
+instead that the next session opens the PR, and write the document for that reader.
+
+The skill saves the document to the OS temp directory — leave it there, it must not land in the
+diff — and its own rules apply: reference the plan, the issue and your commits by path or URL
+instead of restating them, and redact anything sensitive. On top of that, the document has to
+carry the things only you know:
 
 - **Done** — what you actually built, in terms of files and function names.
 - **Deviations** — where you diverged from the plan, and why.
@@ -159,3 +177,22 @@ so write it for them, not for a status update:
   renamed, a helper worth reusing, a file that turned out to be structured differently than the
   plan describes, a gotcha that cost you time.
 - **Stopped early?** Say exactly where and why, and what state the worktree is in.
+
+Then read the file back and confirm it stands alone for someone who was not here. A handoff that
+only makes sense to you is the same as no handoff.
+
+If the `handoff` skill is not installed in this environment, write the same document yourself to
+`${TMPDIR:-/tmp}/ship-issue-{{ISSUE_NUMBER}}-chunk-{{CHUNK_NUMBER}}-handoff.md` and say in your
+report that you wrote it by hand rather than through the skill.
+
+## Report back
+
+Short — the detail lives in the handoff document, and the orchestrator reads that. It needs:
+
+- **Status** — green and pushed, or stopped early.
+- **Handoff document** — its absolute path.
+- **Done** — two or three lines on what landed.
+- **Anything that changes the rest of the plan** — a chunk that can no longer work as written, a
+  dependency the plan missed. Say it here too; this is what decides whether the run continues.
+- **Screenshots** — the published URLs, or the `un-capturable:` reason.
+- **Verification** — the commands and their actual results.

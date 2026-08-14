@@ -82,8 +82,12 @@ session) → **approval gate** → one sonnet implementer per chunk, run in orde
 or just `12`.
 
 The chunks are real agent boundaries, not headings in a document: each chunk gets a fresh session
-sized to its own context budget, hands the next one a written report of what it actually did, and
-has to leave the build green before the next starts.
+sized to its own context budget, and has to leave the build green before the next starts. The
+continuity between them is a written handoff — each implementer finishes by invoking the
+[`handoff` skill](https://github.com/mattpocock/skills) to compact its session into a
+document aimed at the agent that runs next, and the orchestrator passes that document's path
+straight into the next implementer's prompt. Without the skill installed the implementer writes
+the same document by hand; setup warns when it can't find it.
 
 UI chunks ship with screenshots, captured one way only: a **throwaway Playwright script against a
 temporary harness route seeded with mock data**, torn down so none of it reaches the diff, then

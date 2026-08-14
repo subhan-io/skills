@@ -34,7 +34,7 @@ That is what the sizing is for — the boundaries are real context resets, not h
 consequences you have to plan around:
 
 - **A chunk must stand alone.** Its agent gets your chunk text, a summary of the whole change,
-  and handoff notes from the chunks before it — nothing else of yours. Name exact file paths,
+  and the handoff documents the chunks before it wrote — nothing else of yours. Name exact file paths,
   function names, and the existing patterns to follow. "Update the callers" is useless to someone
   who wasn't there when you found them; list them.
 - **A chunk must end green** — test/typecheck/lint all passing, so the worktree is safe to hand
