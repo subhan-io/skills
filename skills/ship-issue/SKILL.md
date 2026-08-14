@@ -88,12 +88,15 @@ reset, not a comment header.
 For each chunk in the approved plan, in order:
 
 1. Spawn a background Agent with `model: "sonnet"`, given `implementer-prompt.md` with every
-   `{{...}}` filled: the chunk itself, the plan summary, the full chunk list for orientation, and
-   `{{PREVIOUS_CHUNKS}}` — the **handoff reports of the chunks already done**, verbatim. The
-   agent has no memory of them; that block is the only continuity it gets. For chunk 1 it says
-   nothing has landed yet.
-2. Wait for it to report, then read the report before spawning the next one. The next chunk's
-   prompt is built from it.
+   `{{...}}` filled: the chunk itself, the plan summary, the full chunk list for orientation,
+   `{{SKILL_DIR}}` — this skill's own absolute directory, since the agent reads
+   `handoff-prompt.md` out of it — and `{{PREVIOUS_CHUNKS}}`, **one line per chunk already done,
+   in order, each naming that chunk and the absolute path of its handoff document**. The agent has
+   no memory of them; those documents are the only continuity it gets. For chunk 1 it says nothing
+   has landed yet.
+2. Wait for it to report, then **read the handoff document it names** before spawning the next
+   one. A path that is missing, empty, or describes a chunk that stopped early is a stop, not a
+   detail.
 3. Only when it reports its chunk green and pushed does the next chunk start.
 
 Never spawn the next chunk over a chunk that stopped early, went red, or reported the plan wrong
@@ -104,8 +107,16 @@ Never spawn the next chunk over a chunk that stopped early, went red, or reporte
 - **Left red or stopped mid-chunk** → the worktree is in an unknown state. Report the state and
   what the agent said; do not paper over it with a fix agent that has no idea what was intended.
 
-Keep every handoff report for the whole run. They feed later chunks, the PR body, and the
-hand-off in step 9.
+**The handoffs are written to a spec, not improvised.** Each implementer ends by compacting its
+session into a handoff document aimed at whoever runs next, and reports the path. The method is
+`handoff-prompt.md`, bundled in this skill's directory — adapted from Matt Pocock's `handoff`
+skill, which it defers to when that skill is installed. Either route produces the same document,
+so **nothing about the run changes with what is installed on the machine** and there is nothing to
+check up front.
+
+You pass **paths, not prose** — the document is written for the next implementer to read in full,
+while you read it to confirm the chunk landed and to mine it for the PR body. Keep every path for
+the whole run: they feed later chunks, the PR body in step 5, and the hand-off in step 9.
 
 **Screenshots.** A chunk touching user-visible code returns published image URLs in its report,
 captured the one sanctioned way: **a throwaway Playwright script against a temporary harness
@@ -118,7 +129,7 @@ incomplete chunk — send it back rather than carrying the gap into the PR.
 
 Once the last chunk reports green, open the PR yourself — into the base branch, with
 `Closes #<n>` in the body. No implementer agent has the whole picture; you do, from the plan and
-the handoff reports. The body should cover what changed and why, chunk by chunk, how it was
+the handoff documents. The body should cover what changed and why, chunk by chunk, how it was
 verified (the results the agents actually observed, not "tests pass"), the screenshots from every
 chunk that produced them, and anything deliberately left out or deviated from.
 

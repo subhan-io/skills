@@ -118,6 +118,9 @@ else
     && WARN+=("pr-media-upload found at $UPLOAD but ${_missing[*]} not on PATH — screenshot publishing will fail after the capture work is already done")
 fi
 
+# No check for the `handoff` skill: chunk implementers follow the bundled handoff-prompt.md, and
+# only defer to that skill when it happens to be installed. Nothing to warn about either way.
+
 # Worktrees live under .claude/worktrees/; committing one is never intended.
 if ! git -C "$ROOT" check-ignore -q .claude/worktrees 2>/dev/null; then
   WARN+=(".claude/worktrees/ is not gitignored — add it before creating worktrees")

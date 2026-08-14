@@ -19,10 +19,17 @@ All chunks, so you can see where yours sits:
 
 {{PREVIOUS_CHUNKS}}
 
-These are handoff reports from the agents that ran before you — what they actually did, which can
-differ from what the plan said they would. **Where a report and the plan disagree, the report
-wins**: it describes the repo you are about to open. Verify anything load-bearing by reading the
-code rather than trusting either.
+Those are handoff documents, one per chunk that ran before you, oldest first — each written by
+that chunk's agent for whoever came next, which is you. **Read all of them before you touch
+code.** They are the only continuity you get, and the last one was written for your chunk
+specifically.
+
+They describe what those agents actually did, which can differ from what the plan said they would.
+**Where a handoff and the plan disagree, the handoff wins**: it describes the repo you are about
+to open. Verify anything load-bearing by reading the code rather than trusting either.
+
+If one of the paths is missing or unreadable, **stop and report that** rather than working around
+the gap — you would be building on a chunk whose actual shape nobody can tell you.
 
 If this says nothing landed yet, you are the first chunk and the worktree is a clean cut of
 `origin/{{BASE_BRANCH}}`.
@@ -50,6 +57,9 @@ branch, not your branch — `cd` in, don't rely on the shell's cwd surviving bet
 
 A command listed as `null` was not detected — find the real one (read `package.json` scripts,
 the CI workflow, the Makefile) rather than skipping the gate silently.
+
+The skill driving this run lives at `{{SKILL_DIR}}` — that is where the files referenced below
+are, and it is not the repo you are changing. Nothing you write ever goes there.
 
 ## How to work
 
@@ -147,15 +157,30 @@ missing, and never substitute a live-browser shot because the harness was inconv
 5. **Do not open or merge a PR**, and do not post the `@codex review` trigger. The orchestrator
    opens the PR once every chunk is in.
 
-Then report back. Your report is the only thing the next chunk's agent will know about your work,
-so write it for them, not for a status update:
+## Hand off to the next chunk
 
-- **Done** — what you actually built, in terms of files and function names.
-- **Deviations** — where you diverged from the plan, and why.
-- **Verification** — the commands you ran and what they actually printed. Not "tests pass".
-- **Screenshots** — the published URLs, each labelled with what it shows. If your chunk touched
-  UI and there are none, say why in the words `un-capturable:` followed by the reason.
-- **For the next chunk** — anything that changes their assumptions: interfaces you introduced or
-  renamed, a helper worth reusing, a file that turned out to be structured differently than the
-  plan describes, a gotcha that cost you time.
-- **Stopped early?** Say exactly where and why, and what state the worktree is in.
+The agent that runs the chunk after yours starts from zero: fresh session, none of your context,
+only what you write down. So finish by writing it a handoff document.
+
+**Read `{{SKILL_DIR}}/handoff-prompt.md` and follow it.** It says where the document goes, what it
+must contain, and how to write for a reader who was not here. It also says to invoke the `handoff`
+skill (`Skill` tool, name `handoff`) when that skill is installed and let it do the writing —
+prefer that, then check the result against the required sections. When it is not installed, the
+bundled instructions are the whole method; the document comes out the same either way.
+
+Either way, frame the document around what the next session does — `implementing the next chunk of
+issue #{{ISSUE_NUMBER}} in worktree {{WORKTREE}}` — which is also the argument to pass the skill
+if you invoke it. If you were the last chunk ({{CHUNK_NUMBER}} of {{CHUNK_TOTAL}}), the next
+session opens the PR instead; say so, and write for that reader.
+
+## Report back
+
+Short — the detail lives in the handoff document, and the orchestrator reads that. It needs:
+
+- **Status** — green and pushed, or stopped early.
+- **Handoff document** — its absolute path.
+- **Done** — two or three lines on what landed.
+- **Anything that changes the rest of the plan** — a chunk that can no longer work as written, a
+  dependency the plan missed. Say it here too; this is what decides whether the run continues.
+- **Screenshots** — the published URLs, or the `un-capturable:` reason.
+- **Verification** — the commands and their actual results.
