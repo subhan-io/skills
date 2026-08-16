@@ -15,10 +15,18 @@ was watching over your shoulder is not a handoff.
 
 ## Where it goes
 
-The OS temp directory — `${TMPDIR:-/tmp}`, never the repo or the worktree. None of it may reach
-the diff. `ship-issue-<issue>-chunk-<n>-handoff.md` is a good name: it makes a stalled run's
-documents findable by hand later. If the `handoff` skill picks its own path, leave it there and
-report that path instead.
+**The run's state directory** — the `stateDir` the orchestrator gives you, which is
+`<repo>/.claude/worktrees/ship-issue-<issue>.state/`. Name it `chunk-<n>-handoff.md`.
+
+That directory sits *beside* the worktree, not inside it, and both facts matter. Inside the
+worktree it would show as untracked and one `git add -A` would commit it into the PR diff — the
+same leak the screenshot-harness rules exist to prevent. Beside it, under the already-gitignored
+`.claude/worktrees/` path, neither the main repo nor the worktree can see it, and it still sits
+next to the approved plan and the earlier chunks' handoffs where the next agent expects them.
+
+Not the OS temp directory: these documents are the only continuity between chunks, and `/tmp` is
+cleared out from under a run that spans a reboot. If the `handoff` skill picks its own path,
+**copy the result into the state directory** and report that path.
 
 ## Rules
 

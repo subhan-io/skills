@@ -30,7 +30,13 @@ Judge each finding on its merits. Severity is codex's opinion, not a verdict:
 
 Findings marked `outdated` or `staleAgainstHead` refer to code that has since moved. Check
 whether they still apply to head before acting; if they don't, say that rather than reverting
-to the old shape.
+to the old shape. `raisedOn` is the commit a finding was actually raised against — GitHub keeps
+advancing a comment's own `commit_id` as head moves, so a finding from an earlier round looks
+current until you read `raisedOn`.
+
+**A finding with `replyCount` above zero has already been answered by an earlier round.** Read
+the thread before touching it: re-fixing settled work is how a run burns its second round on the
+first round's findings.
 
 Hard rules:
 
@@ -41,18 +47,27 @@ Hard rules:
   the new URL — a stale shot is worse than none, because it certifies a state that no longer
   exists. Capture it the same way the implementers did: a **throwaway Playwright script against a
   temporary, uncommitted harness route seeded with mock data**, on a dev server you start on an
-  ephemeral port, torn down completely so none of it lands in the diff. Publish with the
-  `pr-media-upload` skill (`${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/pr-media-upload/upload.sh`
-  or `$HOME/.claude/skills/pr-media-upload/upload.sh`). **Never `agent-browser`, the browser MCP
-  tools, the in-app browser pane, or a preview deploy** — those need real auth and real data and
-  cannot be reproduced from the diff.
+  ephemeral port, torn down completely so none of it lands in the diff. Stop that server by the
+  PID you recorded, never `pkill -f <port>` — the pattern matches your own shell and kills your
+  session. Publish with the `pr-media-upload` skill; search for it rather than assuming a depth:
+  `find "$HOME/.claude/plugins" "$HOME/.claude/skills" -path '*pr-media-upload/upload.sh' -type f -perm -u+x 2>/dev/null | head -1`.
+  **Never `agent-browser`, the browser MCP tools, the in-app browser pane, or a preview deploy** —
+  those need real auth and real data and cannot be reproduced from the diff.
+- **Updating the PR body: check the exit code.** `gh pr edit` fails outright against hosts where
+  Projects (classic) is sunset unless `gh` is recent, and it fails *silently* from the caller's
+  point of view — the body simply does not change. `gh api repos/<slug>/pulls/<n> -X PATCH -F
+  body=@file` always works.
 
 ## Finishing
 
 1. Run every verification command from inside the worktree; they must pass.
 2. Commit and push.
 3. Post one PR comment summarising the round: what you fixed, what you rebutted and why, what
-   you deferred. End it with `(resolver, round {{ROUND}})`.
+   you deferred. End it with `(resolver, round {{ROUND}})`. **Post it as an issue comment on the
+   PR** (`gh pr comment`) even if you also reply in a finding's own thread — that marker is how
+   the orchestrator counts rounds against the cap, and a reply inside a review thread does not
+   show up in `gh pr view --json comments`. Replying in-thread as well is good practice: it puts
+   the resolution where the finding is.
 4. **Do not merge**, and do not re-trigger codex — the orchestrator handles the next round.
 
 Report back: what you changed, what you pushed back on, verification results as observed, and

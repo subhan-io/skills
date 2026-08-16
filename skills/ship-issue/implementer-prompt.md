@@ -54,9 +54,13 @@ branch, not your branch — `cd` in, don't rely on the shell's cwd surviving bet
 - test: `{{TEST_CMD}}`
 - typecheck: `{{TYPECHECK_CMD}}`
 - lint: `{{LINT_CMD}}`
+- the gate the issue itself names: `{{ISSUE_STATED_COMMANDS}}`
 
 A command listed as `null` was not detected — find the real one (read `package.json` scripts,
-the CI workflow, the Makefile) rather than skipping the gate silently.
+the CI workflow, the Makefile) rather than skipping the gate silently. Where the issue names its
+own gate and it differs from the detected ones, **the issue wins** — in a workspace the real
+check is often app-local (`cd apps/foo && pnpm check`) while detection reports the root scripts.
+Run both rather than assuming one implies the other.
 
 The skill driving this run lives at `{{SKILL_DIR}}` — that is where the files referenced below
 are, and it is not the repo you are changing. Nothing you write ever goes there.
@@ -114,7 +118,11 @@ see.
    props, no test-only branches in real components — and it keeps the harness from importing the
    server chain, so no database or secrets are involved.
 3. **Run the dev server yourself on an ephemeral port you pick**, avoiding any fixed port the
-   repo's test suites use. Background it and wait for its ready line before navigating.
+   repo's test suites use. Background it, record its PID (`$!`), and wait for its ready line
+   before navigating.
+   - **Stop it later with that PID, never `pkill -f <port>`.** Your own shell command line
+     contains the port, so the pattern matches the shell running it and kills your session
+     mid-chunk. `kill "$devpid"` is the whole fix.
 4. **Capture with an uncommitted throwaway script** — import `chromium` from the app's own
    Playwright dev dependency and drive it headless. Shoot desktop (1440×900) and, when the change
    is layout-sensitive, mobile (390×844). This is *not* the same as running the repo's e2e or
@@ -123,14 +131,21 @@ see.
    - If a shot comes back blank or mid-skeleton, **wait on a real selector**, never a sleep.
    - Never retry a failed browser launch in a loop. If Chromium is missing, install it once, then
      report the failure if it still won't start.
+   - A dev server often paints a framework badge over the page (Next.js draws a floating dev
+     indicator). Turn it off in config for the run, or the evidence ships with a widget on it.
+   - A throwaway script living outside the repo cannot `import` the app's Playwright — Node
+     resolves from the script's own path, and `/tmp` has no `node_modules`. Anchor a
+     `createRequire` at the app's `package.json` and `require("@playwright/test")` from there.
 5. **Publish each shot, before you delete anything.** The URL is the only part of the capture
    that survives; a deleted PNG cannot be uploaded and the shot has to be retaken from scratch.
    Use the `pr-media-upload` skill, which uploads to a public bucket and echoes one line — the
-   URL — to stdout. Resolve it by install path:
+   URL — to stdout. **The orchestrator passes you its absolute path** — use that verbatim if you
+   have it. Otherwise search rather than guessing at the nesting depth, because the plugin-cache
+   layout buries it several levels down:
 
    ```sh
-   upload=$(ls "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/pr-media-upload/upload.sh" \
-               "$HOME/.claude/skills/pr-media-upload/upload.sh" 2>/dev/null | head -1)
+   upload=$(find "$HOME/.claude/plugins" "$HOME/.claude/skills" \
+              -path '*pr-media-upload/upload.sh' -type f -perm -u+x 2>/dev/null | head -1)
    url=$("$upload" ./shot-desktop.png)
    ```
 
@@ -167,6 +182,10 @@ must contain, and how to write for a reader who was not here. It also says to in
 skill (`Skill` tool, name `handoff`) when that skill is installed and let it do the writing —
 prefer that, then check the result against the required sections. When it is not installed, the
 bundled instructions are the whole method; the document comes out the same either way.
+
+It goes in this run's state directory — **`{{STATE_DIR}}/chunk-{{CHUNK_NUMBER}}-handoff.md`**.
+That directory sits beside the worktree, not inside it, so nothing you write there can reach the
+PR diff. The approved plan is in the same place, at `{{STATE_DIR}}/plan.md`.
 
 Either way, frame the document around what the next session does — `implementing the next chunk of
 issue #{{ISSUE_NUMBER}} in worktree {{WORKTREE}}` — which is also the argument to pass the skill
