@@ -31,6 +31,12 @@ Judge each finding on its merits. Severity is codex's opinion, not a verdict:
 - **Finding is wrong** → do not comply. Reply to that specific inline comment with the evidence
   showing why (the code path it missed, the test that covers it, the constraint it didn't know).
   An honest rebuttal is a valid resolution; silent compliance with a wrong finding is not.
+
+**End every in-thread reply with `(resolver, round {{ROUND}})`, not just the round summary.**
+That marker is what `codex-wait.sh findings` counts as `resolverReplyCount`, and it is how the
+next round tells a finding you have already answered from one still outstanding. A thread you
+replied to without the marker reads as unresolved — `counts.unresolved` will overstate the work
+left, and the next resolver may redo yours.
 - **Finding is out of scope** → say so on the comment and, if it is worth doing, note it for a
   follow-up issue. Do not expand the PR.
 
