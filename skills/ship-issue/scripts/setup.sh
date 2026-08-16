@@ -25,6 +25,7 @@ ROOT="$(main_repo_root)"
 BASE="$(default_branch)"
 BRANCH="ship/issue-$ISSUE"
 WT="$ROOT/.claude/worktrees/ship-issue-$ISSUE"
+STATE="$ROOT/.claude/worktrees/ship-issue-$ISSUE.state"
 WARN=()
 
 # The issue must exist and be open — planning a closed issue is almost always a stale link.
@@ -90,6 +91,37 @@ if [ -n "$_watch" ]; then
   WARN+=("test script looks like WATCH mode ($_watch) — it will hang, not fail. Find the non-watch invocation before implementing")
 fi
 
+# The issue usually names its own gate ("`pnpm check` passes" in the acceptance criteria), and in
+# a monorepo that command frequently does NOT exist at the root — it lives in the app the issue is
+# about. Detection reads the root manifest, so left alone it reports a set of commands that are
+# real but beside the point, and the agent verifies the wrong thing. Surface what the issue asked
+# for and say where the script actually lives.
+STATED='[]'
+if [ -f "$ROOT/package.json" ]; then
+  _pm="$(echo "$CMDS" | jq -r '.install // "" | split(" ")[0]')"
+  _stated_raw=$(echo "$issue_json" | jq -r '.body // ""' \
+    | grep -oE '`(pnpm|npm|yarn|bun)( run)? [a-zA-Z][a-zA-Z0-9:_-]*`' | tr -d '`' | sort -u || true)
+  while IFS= read -r _cmd; do
+    [ -n "$_cmd" ] || continue
+    _script="${_cmd##* }"
+    # Where does this script actually live? Root first, then any workspace manifest.
+    if jq -e --arg s "$_script" '.scripts[$s] // empty' "$ROOT/package.json" >/dev/null 2>&1; then
+      _where="."
+    else
+      _where=$(find "$ROOT" -maxdepth 3 -name package.json -not -path '*/node_modules/*' \
+                 -exec sh -c 'jq -e --arg s "$1" ".scripts[\$s] // empty" "$2" >/dev/null 2>&1' _ "$_script" {} \; \
+                 -print 2>/dev/null | head -1)
+      _where="${_where:+$(dirname "${_where#"$ROOT"/}")}"
+    fi
+    if [ -z "$_where" ]; then
+      WARN+=("issue names \`$_cmd\` but no package.json in this repo declares a '$_script' script — confirm the command with the user")
+    elif [ "$_where" != "." ]; then
+      WARN+=("issue names \`$_cmd\` but '$_script' is NOT a root script — it lives in $_where; run it as: cd $_where && $_cmd")
+    fi
+    STATED=$(jq -c --arg c "$_cmd" --arg w "${_where:-}" '. + [{command:$c, dir:(if $w=="" then null else $w end)}]' <<<"$STATED")
+  done <<<"$_stated_raw"
+fi
+
 # Has the codex connector ever reviewed here? If not, the review step will hang on a bot that
 # is not installed, so it is worth knowing up front rather than after a 15-minute timeout.
 codex_seen=$(gh api "repos/$SLUG/pulls/comments?per_page=100" \
@@ -101,17 +133,34 @@ codex_seen=$(gh api "repos/$SLUG/pulls/comments?per_page=100" \
 # pr-media-upload — a separate plugin needing `infisical` and `aws` on PATH plus credentials.
 # Discovering that at the publish step means the whole capture is wasted, so check it up front
 # and let the human decide (install the deps, or accept UI chunks reporting un-capturable).
+# Search, don't guess at the depth. The plugin-cache layout nests the skill several levels down
+# (plugins/cache/<marketplace>/<plugin>/<hash>/skills/pr-media-upload/upload.sh), so a glob with a
+# fixed number of wildcards reports "not installed" for a plugin that is installed and working.
 UPLOAD=""
 for _p in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/pr-media-upload/upload.sh" \
-          "$HOME/.claude/skills/pr-media-upload/upload.sh" \
-          "$HOME/.claude/plugins"/*/skills/pr-media-upload/upload.sh; do
+          "$HOME/.claude/skills/pr-media-upload/upload.sh"; do
   [ -x "$_p" ] && { UPLOAD="$_p"; break; }
 done
 if [ -z "$UPLOAD" ]; then
+  # Only search roots that exist, and swallow the status: under `set -o pipefail` a find that
+  # errors on a missing directory takes the whole script down with it.
+  _roots=()
+  for _r in "$HOME/.claude/plugins" "$HOME/.claude/skills"; do
+    [ -d "$_r" ] && _roots+=("$_r")
+  done
+  if [ ${#_roots[@]} -gt 0 ]; then
+    UPLOAD="$(find "${_roots[@]}" -path '*pr-media-upload/upload.sh' \
+                -type f -perm -u+x -print 2>/dev/null | head -1 || true)"
+  fi
+fi
+if [ -z "$UPLOAD" ]; then
   WARN+=("pr-media-upload not found — UI chunks will have nowhere to publish screenshots; install the plugin or expect them to report un-capturable")
 else
+  # uuidgen is not a given on a fresh Debian/Alpine box, and upload.sh calls it to build the
+  # object key — missing, it fails AFTER the capture work is done, which is the whole thing this
+  # check exists to prevent.
   _missing=()
-  for _bin in infisical aws; do
+  for _bin in infisical aws uuidgen; do
     command -v "$_bin" >/dev/null 2>&1 || _missing+=("$_bin")
   done
   [ ${#_missing[@]} -gt 0 ] \
@@ -144,12 +193,24 @@ if [ "$DRY" = false ]; then
       git -C "$ROOT" worktree add "$WT" -b "$BRANCH" "origin/$BASE" --quiet
     fi
   fi
+
+  # Run state lives BESIDE the worktree, not inside it. Inside, every file shows as untracked and
+  # one `git add -A` commits the plan and the handoffs into the PR diff — the same leak the
+  # screenshot harness rules exist to prevent. Here it is under the already-gitignored
+  # .claude/worktrees/ path, so neither the main repo nor the worktree can see it.
+  mkdir -p "$STATE"
+
+  # A fresh worktree is a fresh checkout: dependencies are not shared with the main one. Left
+  # undetected, the planner burns part of its budget discovering this and installing.
+  if [ -f "$WT/package.json" ] && [ ! -d "$WT/node_modules" ]; then
+    WARN+=("worktree has no node_modules — run '$(echo "$CMDS" | jq -r '.install // "the install command"')' in $WT before planning")
+  fi
 fi
 
 jq -n --argjson issue "$issue_json" --arg slug "$SLUG" --arg base "$BASE" \
-      --arg branch "$BRANCH" --arg wt "$WT" --argjson cmds "$CMDS" \
-      --argjson dry "$DRY" --args '
-  {repo:$slug, baseBranch:$base, branch:$branch, worktree:$wt, dryRun:$dry,
+      --arg branch "$BRANCH" --arg wt "$WT" --arg state "$STATE" --argjson cmds "$CMDS" \
+      --argjson stated "$STATED" --argjson dry "$DRY" --args '
+  {repo:$slug, baseBranch:$base, branch:$branch, worktree:$wt, stateDir:$state, dryRun:$dry,
    issue:{number:$issue.number, title:$issue.title, url:$issue.url,
           state:$issue.state, labels:($issue.labels|map(.name))},
-   commands:$cmds, warnings:$ARGS.positional}' "${WARN[@]+"${WARN[@]}"}"
+   commands:$cmds, issueStatedCommands:$stated, warnings:$ARGS.positional}' "${WARN[@]+"${WARN[@]}"}"
