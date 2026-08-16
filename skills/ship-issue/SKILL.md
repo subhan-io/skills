@@ -37,14 +37,28 @@ plus whatever rebase/fix agents the sync check calls for. A five-chunk plan is f
 sequentially.
 
 **Codex is not a GitHub check.** Nothing in `gh pr checks` reflects it. You post `@codex review`,
-the review lands minutes later as a review body plus inline comments, and the only completion
-signal is that the bot has gone quiet for the settle window (120s). Two rules, both encoded in
-`codex-wait.sh` and both learned the hard way — do not second-guess them:
+the review lands minutes later, and the only completion signal is that the bot has gone quiet for
+the settle window (120s). It arrives in **either of two shapes** — a PR review plus inline
+comments when it has findings, or a plain issue comment ("no major issues") when it does not.
+Three rules, all encoded in `codex-wait.sh` and all learned the hard way — do not second-guess
+them:
 
 - **Never read an `arriving` review.** Codex posts inline comments in bursts *after* the review
   body, so reading early gives a truncated finding set and the resolver fixes half the review.
 - **Never treat a review of an older commit as covering head.** Coverage is decided by the
-  `**Reviewed commit:** <sha>` line in the review body, not by timestamps.
+  `**Reviewed commit:** <sha>` line, not by timestamps — and that line appears in both shapes.
+- **Never trust an inline finding's `commit_id`.** GitHub advances it as head moves, so a finding
+  from two rounds ago reports the current head and reads as new. `findings` reports `raisedOn`
+  (the original commit) for exactly this reason.
+- **A thread with replies in it is not a resolved finding.** Prior resolution is evidenced by the
+  `(resolver, round N)` marker — `resolverReplyCount` and `counts.unresolved` — not by
+  `replyCount`, which also counts a human asking codex a follow-up.
+
+**Two `gh` traps worth knowing before they eat a step.** `gh pr edit` fails outright on hosts
+where GitHub has sunset Projects (classic) unless `gh` is recent — it queries the removed
+`projectCards` field and exits 1, so the edit silently never applies. Either upgrade `gh` or use
+`gh api repos/<slug>/pulls/<n> -X PATCH -F body=@file`, and **check the exit code** rather than
+assuming an edit landed.
 
 ## The run, in order
 
@@ -57,6 +71,22 @@ Read `warnings` before going further. An existing worktree, a missing test comma
 undetectable toolchain, or no sign of the Codex app in this repo each change what you should do
 next — **surface them to the user; never paper over them.** The script deliberately never resets
 an existing worktree: whether to build on prior work or discard it is the human's call.
+
+Two fields in the blob are worth more than they look:
+
+- **`issueStatedCommands`** — commands the issue itself names, typically in its acceptance
+  criteria, with the directory each script actually lives in. In a monorepo the issue's real gate
+  is often app-local (`cd apps/foo && pnpm check`) while the detected `commands` are the root
+  ones: both real, but only one is what the issue is asking you to satisfy. **Pass these to every
+  agent**, and prefer them over the generic detection when they disagree.
+- **`stateDir`** — `<repo>/.claude/worktrees/ship-issue-<n>.state/`, beside the worktree rather
+  than inside it, so nothing written there can reach the PR diff. The approved plan and every
+  chunk handoff live here.
+
+**Read files from the worktree, never from the main checkout.** They are different commits: the
+worktree is cut from `origin/<base>`, while the main checkout is wherever the human left it and is
+routinely behind. A `package.json` read from the wrong one describes a toolchain that no longer
+exists, and every agent you brief inherits the error.
 
 A warning about `pr-media-upload` (missing plugin, or `infisical`/`aws` not on `PATH`) matters
 only if this issue touches UI — raise it then, before planning, since the alternative is an agent
@@ -75,6 +105,16 @@ Present the plan to the user and **wait**. Do not spawn the implementer, do not 
 do not write code. This is the whole point of the skill's interactive shape: the cheapest place
 to catch a wrong approach is before anything is built.
 
+**On approval, write the plan to `<stateDir>/plan.md` before spawning anything**, along with any
+decisions the human made at the gate — those are part of the plan now, and a chunk agent that
+re-litigates a settled question wastes a session. Until it is on disk the plan exists only in your
+context: the chunks cannot cite it, a handoff that points at it is pointing at nothing, and a
+resumed session has lost it. Pass the path to every agent from here on.
+
+Do **not** post the plan to the issue instead. The issue is the spec; a chunked implementation
+plan with token estimates is process ephemera that clutters it for every later reader, and
+re-planning after feedback leaves two comments with no way to tell which is current.
+
 If the user asks for changes, re-spawn the planner with their feedback and present again. Only
 an explicit green light moves to step 4.
 
@@ -90,10 +130,15 @@ For each chunk in the approved plan, in order:
 1. Spawn a background Agent with `model: "sonnet"`, given `implementer-prompt.md` with every
    `{{...}}` filled: the chunk itself, the plan summary, the full chunk list for orientation,
    `{{SKILL_DIR}}` — this skill's own absolute directory, since the agent reads
-   `handoff-prompt.md` out of it — and `{{PREVIOUS_CHUNKS}}`, **one line per chunk already done,
-   in order, each naming that chunk and the absolute path of its handoff document**. The agent has
-   no memory of them; those documents are the only continuity it gets. For chunk 1 it says nothing
-   has landed yet.
+   `handoff-prompt.md` out of it — `{{STATE_DIR}}` from the setup blob, where the plan and the
+   handoffs live, `{{ISSUE_STATED_COMMANDS}}` so it verifies the gate the issue actually names,
+   and `{{PREVIOUS_CHUNKS}}`, **one line per chunk already done, in order, each naming that chunk
+   and the absolute path of its handoff document**. The agent has no memory of them; those
+   documents are the only continuity it gets. For chunk 1 it says nothing has landed yet.
+
+   Also hand it `uploadScript` from the setup blob — the absolute path of `pr-media-upload`'s
+   `upload.sh`, when setup found one. The agent can search for it, but a path you already have
+   beats a search it might get wrong on the first try, after it has done the capture work.
 2. Wait for it to report, then **read the handoff document it names** before spawning the next
    one. A path that is missing, empty, or describes a chunk that stopped early is a stop, not a
    detail.
@@ -161,21 +206,30 @@ then run `scripts/codex-wait.sh watch <pr>` through Bash with **`run_in_backgrou
 end your turn. Its completion notification re-invokes you. Never run `watch` in the foreground —
 it blocks for up to 15 minutes.
 
-Exit 4 means it timed out with codex still silent. Say so and hand back to the user; do not
-re-trigger on a loop.
+Exit 4 means it timed out with codex still silent. **Confirm that before believing it** — check
+the bot's PR reviews *and* its issue comments for a `**Reviewed commit:**` line matching head,
+since a verdict that arrived in an unexpected shape is indistinguishable from silence at the
+script's level. If it really is silent, say so and hand back to the user; do not re-trigger on a
+loop.
 
 ### 8. Resolve — opus subagent
 
 With the review settled, run `scripts/codex-wait.sh findings <pr>` and spawn a background Agent
-with `model: "opus"`, given `resolver-prompt.md` with the findings inline. It fixes what is
-right, rebuts what is wrong with evidence, defers what is out of scope, verifies, pushes, and
-posts a round summary.
+with `model: "opus"`, given `resolver-prompt.md` with the findings inline — and with
+`{{ISSUE_STATED_COMMANDS}}` filled, exactly as the implementers got it. A resolver that only
+knows the root commands can fix app-local code and report it verified without ever running the
+gate the issue asked for. It fixes what is right, rebuts what is wrong with evidence, defers what
+is out of scope, verifies, pushes, and posts a round summary.
 
 Its push moves head, so codex will read as `not-requested` again. **Return to step 6** — that is
 intended: each round gets a review of the code it is actually judging.
 
-**Max 2 resolve rounds.** Count them by the `(resolver, round N)` PR comments, so a resumed
-session sees the same count. At the cap, stop and hand the PR to the user with what is
+**Max 2 resolve rounds.** Count them by the `(resolver, round N)` marker, and look for it in
+**both** the PR's issue comments and its review-comment replies — a resolver answering a finding
+in its own thread is doing the right thing, but that reply never appears in
+`gh pr view --json comments`, so a count that reads only there sees zero rounds and blows the cap.
+`codex-wait.sh findings` also reports `replyCount` per finding for the same purpose. At the cap,
+stop and hand the PR to the user with what is
 outstanding — do not start a third round.
 
 ### 9. Hand off

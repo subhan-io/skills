@@ -25,6 +25,7 @@ ROOT="$(main_repo_root)"
 BASE="$(default_branch)"
 BRANCH="ship/issue-$ISSUE"
 WT="$ROOT/.claude/worktrees/ship-issue-$ISSUE"
+STATE="$ROOT/.claude/worktrees/ship-issue-$ISSUE.state"
 WARN=()
 
 # The issue must exist and be open — planning a closed issue is almost always a stale link.
@@ -101,17 +102,34 @@ codex_seen=$(gh api "repos/$SLUG/pulls/comments?per_page=100" \
 # pr-media-upload — a separate plugin needing `infisical` and `aws` on PATH plus credentials.
 # Discovering that at the publish step means the whole capture is wasted, so check it up front
 # and let the human decide (install the deps, or accept UI chunks reporting un-capturable).
+# Search, don't guess at the depth. The plugin-cache layout nests the skill several levels down
+# (plugins/cache/<marketplace>/<plugin>/<hash>/skills/pr-media-upload/upload.sh), so a glob with a
+# fixed number of wildcards reports "not installed" for a plugin that is installed and working.
 UPLOAD=""
 for _p in "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/skills/pr-media-upload/upload.sh" \
-          "$HOME/.claude/skills/pr-media-upload/upload.sh" \
-          "$HOME/.claude/plugins"/*/skills/pr-media-upload/upload.sh; do
+          "$HOME/.claude/skills/pr-media-upload/upload.sh"; do
   [ -x "$_p" ] && { UPLOAD="$_p"; break; }
 done
 if [ -z "$UPLOAD" ]; then
+  # Only search roots that exist, and swallow the status: under `set -o pipefail` a find that
+  # errors on a missing directory takes the whole script down with it.
+  _roots=()
+  for _r in "$HOME/.claude/plugins" "$HOME/.claude/skills"; do
+    [ -d "$_r" ] && _roots+=("$_r")
+  done
+  if [ ${#_roots[@]} -gt 0 ]; then
+    UPLOAD="$(find "${_roots[@]}" -path '*pr-media-upload/upload.sh' \
+                -type f -perm -u+x -print 2>/dev/null | head -1 || true)"
+  fi
+fi
+if [ -z "$UPLOAD" ]; then
   WARN+=("pr-media-upload not found — UI chunks will have nowhere to publish screenshots; install the plugin or expect them to report un-capturable")
 else
+  # uuidgen is not a given on a fresh Debian/Alpine box, and upload.sh calls it to build the
+  # object key — missing, it fails AFTER the capture work is done, which is the whole thing this
+  # check exists to prevent.
   _missing=()
-  for _bin in infisical aws; do
+  for _bin in infisical aws uuidgen; do
     command -v "$_bin" >/dev/null 2>&1 || _missing+=("$_bin")
   done
   [ ${#_missing[@]} -gt 0 ] \
@@ -144,12 +162,96 @@ if [ "$DRY" = false ]; then
       git -C "$ROOT" worktree add "$WT" -b "$BRANCH" "origin/$BASE" --quiet
     fi
   fi
+
+  # Run state lives BESIDE the worktree, not inside it. Inside, every file shows as untracked and
+  # one `git add -A` commits the plan and the handoffs into the PR diff — the same leak the
+  # screenshot harness rules exist to prevent. Here it is under the already-gitignored
+  # .claude/worktrees/ path, so neither the main repo nor the worktree can see it.
+  mkdir -p "$STATE"
+
+  # A fresh worktree is a fresh checkout: dependencies are not shared with the main one. Left
+  # undetected, the planner burns part of its budget discovering this and installing.
+  if [ -f "$WT/package.json" ] && [ ! -d "$WT/node_modules" ]; then
+    WARN+=("worktree has no node_modules — run '$(echo "$CMDS" | jq -r '.install // "the install command"')' in $WT before planning")
+  fi
 fi
 
+# The issue usually names its own gate ("`pnpm check` passes" in the acceptance criteria), and in
+# a monorepo that command frequently does NOT exist at the root — it lives in the app the issue is
+# about. Detection reads the root manifest, so left alone it reports a set of commands that are
+# real but beside the point, and the agent verifies the wrong thing. Surface what the issue asked
+# for and say where the script actually lives.
+#
+# Resolve it against the WORKTREE, which is cut from origin/<base>, not against the main checkout,
+# which is wherever the human left it and is routinely behind. A script added, moved or removed on
+# the base branch would otherwise be reported with the wrong directory — or as missing — and that
+# stale answer is what every agent gets told. This runs after worktree creation for that reason.
+STATED='[]'
+_src="$ROOT"; _src_label="main checkout"
+if [ -d "$WT" ]; then _src="$WT"; _src_label="worktree"; fi
+if [ -f "$_src/package.json" ]; then
+  [ "$_src_label" = "worktree" ] || WARN+=("issue-stated commands were resolved against the $_src_label (no worktree yet) — it may be behind origin/$BASE")
+  # Pull every backticked span out of the issue body, then read the command out of the span. The
+  # documented monorepo form is `cd apps/foo && pnpm check`, so a pattern anchored on a backtick
+  # immediately before the package manager finds nothing at all — silently, which is worse than
+  # not looking.
+  #
+  # Two values come out of each span and they are NOT the same thing:
+  #   _pmcmd  — the full command to RUN, arguments and all. `pnpm test --filter web` and
+  #             `pnpm test` are different gates; a flag can pick the workspace or turn off watch
+  #             mode, so reporting the truncated form lets an agent pass a check it never ran.
+  #   _script — just the script name, used ONLY to locate the manifest that declares it.
+  _spans=$(echo "$issue_json" | jq -r '.body // ""' | grep -oE '`[^`]+`' | tr -d '`' | sort -u || true)
+  while IFS= read -r _span; do
+    [ -n "$_span" ] || continue
+    # Strip a leading `cd <dir> &&`, keeping the directory as an explicit hint from the author.
+    _hint=""; _rest="$_span"
+    case "$_span" in
+      cd\ *\&\&*)
+        _hint=$(printf '%s' "$_span" | sed -E 's/^cd +([^ ]+) +&&.*/\1/')
+        _rest=$(printf '%s' "$_span" | sed -E 's/^cd +[^ ]+ +&& *//')
+        ;;
+    esac
+    printf '%s' "$_rest" | grep -qE '^(pnpm|npm|yarn|bun)( run)? [a-zA-Z]' || continue
+    _pmcmd="$_rest"                                   # full command, arguments preserved
+    _script=$(printf '%s' "$_rest" \
+      | sed -E 's/^(pnpm|npm|yarn|bun)( run)? +([a-zA-Z][a-zA-Z0-9:_-]*).*/\3/')
+    # An explicit `cd <dir>` from the issue author beats repo-wide discovery: when the root and an
+    # app both declare the same script name, searching first resolves to the wrong package and
+    # every agent then runs the right script in the wrong place. Validate the hint, do not assume.
+    _where=""
+    if [ -n "$_hint" ] && [ -f "$_src/$_hint/package.json" ] \
+       && jq -e --arg s "$_script" '.scripts[$s] // empty' "$_src/$_hint/package.json" >/dev/null 2>&1; then
+      _where="$_hint"
+    elif jq -e --arg s "$_script" '.scripts[$s] // empty' "$_src/package.json" >/dev/null 2>&1; then
+      _where="."
+    else
+      _where=$(find "$_src" -maxdepth 3 -name package.json -not -path '*/node_modules/*' \
+                 -exec sh -c 'jq -e --arg s "$1" ".scripts[\$s] // empty" "$2" >/dev/null 2>&1' _ "$_script" {} \; \
+                 -print 2>/dev/null | head -1 || true)
+      _where="${_where:+$(dirname "${_where#"$_src"/}")}"
+    fi
+    if [ -z "$_where" ] && [ -n "$_hint" ]; then
+      WARN+=("issue says to run \`$_pmcmd\` in $_hint but no package.json there declares '$_script' — confirm the command with the user")
+      _where="$_hint"
+    elif [ -z "$_where" ]; then
+      WARN+=("issue names \`$_pmcmd\` but no package.json in the $_src_label declares a '$_script' script — confirm the command with the user")
+    elif [ "$_where" != "." ]; then
+      WARN+=("issue names \`$_pmcmd\` but '$_script' is NOT a root script — it lives in $_where; run it as: cd $_where && $_pmcmd")
+    fi
+    STATED=$(jq -c --arg c "$_pmcmd" --arg w "${_where:-}" \
+      '. + [{command:$c, dir:(if $w=="" then null else $w end)}]' <<<"$STATED")
+  done <<<"$_spans"
+fi
+
+# uploadScript is emitted so the orchestrator can hand implementers the absolute path rather than
+# making each one repeat the filesystem search — and get it wrong only after doing the capture.
 jq -n --argjson issue "$issue_json" --arg slug "$SLUG" --arg base "$BASE" \
-      --arg branch "$BRANCH" --arg wt "$WT" --argjson cmds "$CMDS" \
-      --argjson dry "$DRY" --args '
-  {repo:$slug, baseBranch:$base, branch:$branch, worktree:$wt, dryRun:$dry,
+      --arg branch "$BRANCH" --arg wt "$WT" --arg state "$STATE" --argjson cmds "$CMDS" \
+      --arg upload "$UPLOAD" --argjson stated "$STATED" --argjson dry "$DRY" --args '
+  {repo:$slug, baseBranch:$base, branch:$branch, worktree:$wt, stateDir:$state, dryRun:$dry,
    issue:{number:$issue.number, title:$issue.title, url:$issue.url,
           state:$issue.state, labels:($issue.labels|map(.name))},
-   commands:$cmds, warnings:$ARGS.positional}' "${WARN[@]+"${WARN[@]}"}"
+   commands:$cmds, issueStatedCommands:$stated,
+   uploadScript:(if $upload == "" then null else $upload end),
+   warnings:$ARGS.positional}' "${WARN[@]+"${WARN[@]}"}"
