@@ -2,8 +2,14 @@
 # codex-wait.sh — request a Codex review and know when it has actually finished.
 #
 # Codex is not a GitHub check: there is no run to wait on and nothing in `gh pr checks` will
-# ever reflect it. You post the "@codex review" trigger, the review lands minutes later as a
-# PR review plus inline comments, and the only completion signal is that the bot has gone quiet.
+# ever reflect it. You post the "@codex review" trigger, the review lands minutes later, and the
+# only completion signal is that the bot has gone quiet.
+#
+# It lands in one of TWO shapes, and you do not get to pick which:
+#   - a PR review (state COMMENTED) plus inline comments — when it has findings
+#   - a plain issue comment                              — when it does not ("no major issues")
+# Both carry the "Reviewed commit:" line. Watching only one of them is how you time out waiting
+# for a review that already arrived.
 #
 #   codex-wait.sh status   <pr> [--quiet]  # JSON snapshot (--quiet = bare state word)
 #   codex-wait.sh request  <pr> [--force]  # post the "@codex review" trigger comment
@@ -23,6 +29,10 @@
 #      resolver silently fixes half the review. 120s of silence is the real signal.
 #   2. "Covers head" is decided by the `**Reviewed commit:** <sha>` line in the review body,
 #      NOT by timestamps. A review of the pre-rework commit is not a review of this PR.
+#   3. An inline finding's `.commit_id` is ADVANCED by GitHub as the head moves, so a finding
+#      raised two rounds ago reports the current head and reads as new. `.original_commit_id`
+#      is where it was actually raised — `findings` reports that as `raisedOn`, and counts
+#      replies so a resolved finding is not resolved twice.
 #
 # Exit codes: 0 ok | 4 watch timed out | 5 request refused (already requested) | 1 other.
 set -euo pipefail
@@ -62,12 +72,24 @@ snapshot() {
     --argjson reviews "$reviews" --argjson comments "$comments" --argjson ic "$issue_comments" '
     ($reviews  | map(select(.user.login == $bot))) as $crev
   | ($comments | map(select(.user.login == $bot))) as $ccom
-  | ($crev | map({at: .submitted_at,
-                  sha: ([ (.body // "") | capture("Reviewed commit:[^\n]*?(?<sha>[0-9a-f]{7,40})").sha ] | first)}))
+  | ($ic       | map(select(.user.login == $bot))) as $cic
+  # Codex delivers its verdict in EITHER shape, and which one you get is not yours to choose:
+  # a PR review (state COMMENTED, with inline comments) when it has findings, or a plain issue
+  # comment when it does not. Both carry the "Reviewed commit:" line. Reading only reviews makes
+  # a comment-shaped verdict invisible, so `watch` sits in `awaiting` for its whole timeout while
+  # the review is already sitting on the PR.
+  | (($crev | map({at: .submitted_at, body: (.body // "")}))
+     + ($cic | map({at: .created_at,  body: (.body // "")}))
+     | map(. + {sha: ([ .body | capture("Reviewed commit:[^\n]*?(?<sha>[0-9a-f]{7,40})").sha ] | first)}))
       as $revs
   | ($revs | map(select(.sha as $s | $s != null and ($head | startswith($s))))) as $headRevs
-  | ([ $ic[] | select((.body // "") | test($trigger; "i")) | .created_at ] | sort | last) as $requestedAt
-  | ((($crev | map(.submitted_at)) + ($ccom | map(.created_at))) | sort | last) as $activityAt
+  # Match the trigger only on comments the bot did not write: codex repeats the literal
+  # "@codex review" string in its own help footer, so an unfiltered match reads that reply
+  # as a fresh request and reports lastRequestAt as LATER than the request that caused it.
+  | ([ $ic[] | select(.user.login != $bot)
+             | select((.body // "") | test($trigger; "i")) | .created_at ] | sort | last) as $requestedAt
+  | ((($crev | map(.submitted_at)) + ($ccom | map(.created_at)) + ($cic | map(.created_at)))
+      | sort | last) as $activityAt
   | (if $activityAt == null then null else ((now - ($activityAt | fromdateiso8601)) | floor) end) as $since
   | (if $requestedAt == null then null else ((now - ($requestedAt | fromdateiso8601)) | floor) end) as $sinceReq
   | (($headRevs | length) > 0) as $coversHead
@@ -127,11 +149,16 @@ case "$CMD" in
     head=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
     reviews=$(gh api "repos/$SLUG/pulls/$PR/reviews" --paginate)
     comments=$(gh api "repos/$SLUG/pulls/$PR/comments" --paginate)
+    issue_comments=$(gh api "repos/$SLUG/issues/$PR/comments" --paginate)
     jq -n --argjson pr "$PR" --arg head "$head" --arg bot "$CODEX_BOT" --argjson all "$ALL" \
-      --argjson reviews "$reviews" --argjson comments "$comments" '
+      --argjson reviews "$reviews" --argjson comments "$comments" --argjson ic "$issue_comments" '
       # Codex badge priorities mapped onto a plain severity scale for the resolver.
       def sev: if . == "1" then "blocker" elif . == "2" then "major" else "note" end;
-      ($comments
+      # Replies live in the same collection, pointing back at the finding they answer. A finding
+      # that has already been replied to is one a previous round resolved.
+      ($comments | map(select(.in_reply_to_id != null)) | group_by(.in_reply_to_id)
+                 | map({key: (.[0].in_reply_to_id | tostring), value: length}) | from_entries) as $replies
+    | ($comments
         | map(select(.user.login == $bot and .in_reply_to_id == null))
         | map(select($all or .position != null))
         | map((.body // "") as $b | {
@@ -139,18 +166,27 @@ case "$CMD" in
             severity: (([ $b | capture("badge/P(?<p>[0-9])").p ] | first | if . == null then "note" else sev end)),
             title: (([ $b | capture("</sub></sub>\\s*(?<t>[^*\n]+)").t ] | first) // ($b | split("\n")[0])),
             outdated: (.position == null),
-            staleAgainstHead: (.commit_id != $head),
+            # GitHub ADVANCES .commit_id as head moves, so it says "fresh" about a finding raised
+            # two rounds ago. .original_commit_id is where it was actually raised and is the only
+            # field that distinguishes a new finding from one a previous round already fixed.
+            raisedOn: .original_commit_id,
+            staleAgainstHead: (.original_commit_id != $head),
+            replyCount: ($replies[(.id | tostring)] // 0),
             url: .html_url,
             body: $b })) as $f
-    | ($reviews
-        | map(select(.user.login == $bot))
-        | map(select(((.body // "") | test("Reviewed commit:[^\n]*?" + $head[0:10])) or $all))
-        | map({submittedAt: .submitted_at,
-               body: ((.body // "") | gsub("(?s)<details>.*?</details>"; "") | gsub("\n{3,}"; "\n\n"))})) as $r
+    # Review bodies come from both delivery shapes, for the same reason as in snapshot().
+    | (($reviews | map(select(.user.login == $bot))
+                 | map({at: .submitted_at, body: (.body // "")}))
+       + ($ic | map(select(.user.login == $bot))
+              | map({at: .created_at, body: (.body // "")}))
+        | map(select((.body | test("Reviewed commit:[^\n]*?" + $head[0:10])) or $all))
+        | map({submittedAt: .at,
+               body: (.body | gsub("(?s)<details>.*?</details>"; "") | gsub("\n{3,}"; "\n\n"))})) as $r
     | {pr: $pr, headSha: $head, reviewBodies: $r, findings: $f,
        counts: {blocker: ($f | map(select(.severity=="blocker")) | length),
                 major:   ($f | map(select(.severity=="major"))   | length),
-                note:    ($f | map(select(.severity=="note"))    | length)}}'
+                note:    ($f | map(select(.severity=="note"))    | length),
+                unanswered: ($f | map(select(.replyCount == 0)) | length)}}'
     ;;
 
   *) die "unknown command: $CMD" ;;
