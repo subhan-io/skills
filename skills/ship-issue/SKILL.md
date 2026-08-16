@@ -49,8 +49,10 @@ them:
   `**Reviewed commit:** <sha>` line, not by timestamps — and that line appears in both shapes.
 - **Never trust an inline finding's `commit_id`.** GitHub advances it as head moves, so a finding
   from two rounds ago reports the current head and reads as new. `findings` reports `raisedOn`
-  (the original commit) and `replyCount` for exactly this reason; a finding with a reply has
-  already been resolved by a previous round.
+  (the original commit) for exactly this reason.
+- **A thread with replies in it is not a resolved finding.** Prior resolution is evidenced by the
+  `(resolver, round N)` marker — `resolverReplyCount` and `counts.unresolved` — not by
+  `replyCount`, which also counts a human asking codex a follow-up.
 
 **Two `gh` traps worth knowing before they eat a step.** `gh pr edit` fails outright on hosts
 where GitHub has sunset Projects (classic) unless `gh` is recent — it queries the removed
@@ -134,9 +136,9 @@ For each chunk in the approved plan, in order:
    and the absolute path of its handoff document**. The agent has no memory of them; those
    documents are the only continuity it gets. For chunk 1 it says nothing has landed yet.
 
-   Also hand it the absolute path of `pr-media-upload`'s `upload.sh` when setup found one. The
-   agent can search for it, but a path you already have beats a search it might get wrong on the
-   first try, after it has done the capture work.
+   Also hand it `uploadScript` from the setup blob — the absolute path of `pr-media-upload`'s
+   `upload.sh`, when setup found one. The agent can search for it, but a path you already have
+   beats a search it might get wrong on the first try, after it has done the capture work.
 2. Wait for it to report, then **read the handoff document it names** before spawning the next
    one. A path that is missing, empty, or describes a chunk that stopped early is a stop, not a
    detail.
@@ -213,9 +215,11 @@ loop.
 ### 8. Resolve — opus subagent
 
 With the review settled, run `scripts/codex-wait.sh findings <pr>` and spawn a background Agent
-with `model: "opus"`, given `resolver-prompt.md` with the findings inline. It fixes what is
-right, rebuts what is wrong with evidence, defers what is out of scope, verifies, pushes, and
-posts a round summary.
+with `model: "opus"`, given `resolver-prompt.md` with the findings inline — and with
+`{{ISSUE_STATED_COMMANDS}}` filled, exactly as the implementers got it. A resolver that only
+knows the root commands can fix app-local code and report it verified without ever running the
+gate the issue asked for. It fixes what is right, rebuts what is wrong with evidence, defers what
+is out of scope, verifies, pushes, and posts a round summary.
 
 Its push moves head, so codex will read as `not-requested` again. **Return to step 6** — that is
 intended: each round gets a review of the code it is actually judging.

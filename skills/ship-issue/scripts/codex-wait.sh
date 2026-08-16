@@ -31,8 +31,12 @@
 #      NOT by timestamps. A review of the pre-rework commit is not a review of this PR.
 #   3. An inline finding's `.commit_id` is ADVANCED by GitHub as the head moves, so a finding
 #      raised two rounds ago reports the current head and reads as new. `.original_commit_id`
-#      is where it was actually raised — `findings` reports that as `raisedOn`, and counts
-#      replies so a resolved finding is not resolved twice.
+#      is where it was actually raised — `findings` reports that as `raisedOn`.
+#   4. Prior resolution is evidenced by a reply carrying the "(resolver, round N)" marker, NOT
+#      by the thread merely having replies in it: a human asking codex a follow-up question is
+#      a reply too, and treating that as "already handled" silently drops a live finding.
+#      `replyCount` is conversation; `resolverReplyCount` (and `counts.unresolved`) is the one
+#      to branch on.
 #
 # Exit codes: 0 ok | 4 watch timed out | 5 request refused (already requested) | 1 other.
 set -euo pipefail
@@ -154,10 +158,17 @@ case "$CMD" in
       --argjson reviews "$reviews" --argjson comments "$comments" --argjson ic "$issue_comments" '
       # Codex badge priorities mapped onto a plain severity scale for the resolver.
       def sev: if . == "1" then "blocker" elif . == "2" then "major" else "note" end;
-      # Replies live in the same collection, pointing back at the finding they answer. A finding
-      # that has already been replied to is one a previous round resolved.
-      ($comments | map(select(.in_reply_to_id != null)) | group_by(.in_reply_to_id)
-                 | map({key: (.[0].in_reply_to_id | tostring), value: length}) | from_entries) as $replies
+      # Replies live in the same collection, pointing back at the finding they answer. Count them
+      # two ways on purpose: ANY reply is just conversation — the author asking codex a follow-up
+      # question is a reply — while a reply carrying the resolver round marker is the only thing
+      # that evidences a previous round having actually resolved the finding. Conflating them
+      # lets a live finding be skipped because somebody spoke in its thread.
+      ($comments | map(select(.in_reply_to_id != null))) as $allReplies
+    | ($allReplies | group_by(.in_reply_to_id)
+                   | map({key: (.[0].in_reply_to_id | tostring), value: length}) | from_entries) as $replies
+    | ($allReplies | map(select((.body // "") | test("\\(resolver, round"; "i")))
+                   | group_by(.in_reply_to_id)
+                   | map({key: (.[0].in_reply_to_id | tostring), value: length}) | from_entries) as $resolved
     | ($comments
         | map(select(.user.login == $bot and .in_reply_to_id == null))
         | map(select($all or .position != null))
@@ -172,6 +183,7 @@ case "$CMD" in
             raisedOn: .original_commit_id,
             staleAgainstHead: (.original_commit_id != $head),
             replyCount: ($replies[(.id | tostring)] // 0),
+            resolverReplyCount: ($resolved[(.id | tostring)] // 0),
             url: .html_url,
             body: $b })) as $f
     # Review bodies come from both delivery shapes, for the same reason as in snapshot().
@@ -186,7 +198,7 @@ case "$CMD" in
        counts: {blocker: ($f | map(select(.severity=="blocker")) | length),
                 major:   ($f | map(select(.severity=="major"))   | length),
                 note:    ($f | map(select(.severity=="note"))    | length),
-                unanswered: ($f | map(select(.replyCount == 0)) | length)}}'
+                unresolved: ($f | map(select(.resolverReplyCount == 0)) | length)}}'
     ;;
 
   *) die "unknown command: $CMD" ;;

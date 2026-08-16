@@ -7,6 +7,12 @@ Worktree `{{WORKTREE}}`, branch `{{BRANCH}}`. Run everything from inside it.
 - test: `{{TEST_CMD}}`
 - typecheck: `{{TYPECHECK_CMD}}`
 - lint: `{{LINT_CMD}}`
+- the gate the issue itself names: `{{ISSUE_STATED_COMMANDS}}`
+
+Where the issue names its own gate and it differs from the detected commands, **the issue wins**
+— in a workspace the real check is frequently app-local (`cd apps/foo && pnpm check`) while
+detection reports the root scripts. A fix to app-local code that only ever ran the root commands
+is unverified, however green those came back. Run both.
 
 ## The review
 
@@ -34,9 +40,11 @@ to the old shape. `raisedOn` is the commit a finding was actually raised against
 advancing a comment's own `commit_id` as head moves, so a finding from an earlier round looks
 current until you read `raisedOn`.
 
-**A finding with `replyCount` above zero has already been answered by an earlier round.** Read
-the thread before touching it: re-fixing settled work is how a run burns its second round on the
-first round's findings.
+**A finding with `resolverReplyCount` above zero was answered by an earlier round** — read that
+thread before touching it, because re-fixing settled work is how a run burns its second round on
+the first round's findings. `replyCount` is not the same signal: it counts any reply at all,
+including a human asking codex a follow-up, so a finding can be live and chatty at once. When the
+two disagree, read the thread and decide; never skip a finding on `replyCount` alone.
 
 Hard rules:
 

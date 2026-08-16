@@ -91,37 +91,6 @@ if [ -n "$_watch" ]; then
   WARN+=("test script looks like WATCH mode ($_watch) — it will hang, not fail. Find the non-watch invocation before implementing")
 fi
 
-# The issue usually names its own gate ("`pnpm check` passes" in the acceptance criteria), and in
-# a monorepo that command frequently does NOT exist at the root — it lives in the app the issue is
-# about. Detection reads the root manifest, so left alone it reports a set of commands that are
-# real but beside the point, and the agent verifies the wrong thing. Surface what the issue asked
-# for and say where the script actually lives.
-STATED='[]'
-if [ -f "$ROOT/package.json" ]; then
-  _pm="$(echo "$CMDS" | jq -r '.install // "" | split(" ")[0]')"
-  _stated_raw=$(echo "$issue_json" | jq -r '.body // ""' \
-    | grep -oE '`(pnpm|npm|yarn|bun)( run)? [a-zA-Z][a-zA-Z0-9:_-]*`' | tr -d '`' | sort -u || true)
-  while IFS= read -r _cmd; do
-    [ -n "$_cmd" ] || continue
-    _script="${_cmd##* }"
-    # Where does this script actually live? Root first, then any workspace manifest.
-    if jq -e --arg s "$_script" '.scripts[$s] // empty' "$ROOT/package.json" >/dev/null 2>&1; then
-      _where="."
-    else
-      _where=$(find "$ROOT" -maxdepth 3 -name package.json -not -path '*/node_modules/*' \
-                 -exec sh -c 'jq -e --arg s "$1" ".scripts[\$s] // empty" "$2" >/dev/null 2>&1' _ "$_script" {} \; \
-                 -print 2>/dev/null | head -1)
-      _where="${_where:+$(dirname "${_where#"$ROOT"/}")}"
-    fi
-    if [ -z "$_where" ]; then
-      WARN+=("issue names \`$_cmd\` but no package.json in this repo declares a '$_script' script — confirm the command with the user")
-    elif [ "$_where" != "." ]; then
-      WARN+=("issue names \`$_cmd\` but '$_script' is NOT a root script — it lives in $_where; run it as: cd $_where && $_cmd")
-    fi
-    STATED=$(jq -c --arg c "$_cmd" --arg w "${_where:-}" '. + [{command:$c, dir:(if $w=="" then null else $w end)}]' <<<"$STATED")
-  done <<<"$_stated_raw"
-fi
-
 # Has the codex connector ever reviewed here? If not, the review step will hang on a bot that
 # is not installed, so it is worth knowing up front rather than after a 15-minute timeout.
 codex_seen=$(gh api "repos/$SLUG/pulls/comments?per_page=100" \
@@ -207,10 +176,65 @@ if [ "$DRY" = false ]; then
   fi
 fi
 
+# The issue usually names its own gate ("`pnpm check` passes" in the acceptance criteria), and in
+# a monorepo that command frequently does NOT exist at the root — it lives in the app the issue is
+# about. Detection reads the root manifest, so left alone it reports a set of commands that are
+# real but beside the point, and the agent verifies the wrong thing. Surface what the issue asked
+# for and say where the script actually lives.
+#
+# Resolve it against the WORKTREE, which is cut from origin/<base>, not against the main checkout,
+# which is wherever the human left it and is routinely behind. A script added, moved or removed on
+# the base branch would otherwise be reported with the wrong directory — or as missing — and that
+# stale answer is what every agent gets told. This runs after worktree creation for that reason.
+STATED='[]'
+_src="$ROOT"; _src_label="main checkout"
+if [ -d "$WT" ]; then _src="$WT"; _src_label="worktree"; fi
+if [ -f "$_src/package.json" ]; then
+  [ "$_src_label" = "worktree" ] || WARN+=("issue-stated commands were resolved against the $_src_label (no worktree yet) — it may be behind origin/$BASE")
+  # Pull every backticked span out of the issue body, then read the command out of the span. The
+  # documented monorepo form is `cd apps/foo && pnpm check`, so a pattern anchored on a backtick
+  # immediately before the package manager finds nothing at all — silently, which is worse than
+  # not looking. Arguments after the script name (`pnpm test --filter web`) are trimmed the same
+  # way: the script name is what locates the manifest.
+  _spans=$(echo "$issue_json" | jq -r '.body // ""' | grep -oE '`[^`]+`' | tr -d '`' | sort -u || true)
+  while IFS= read -r _span; do
+    [ -n "$_span" ] || continue
+    _pmcmd=$(printf '%s' "$_span" \
+      | grep -oE '(pnpm|npm|yarn|bun)( run)? [a-zA-Z][a-zA-Z0-9:_-]*' | head -1 || true)
+    [ -n "$_pmcmd" ] || continue
+    _script="${_pmcmd##* }"
+    # `cd <dir> && ...` in the issue tells us where the author expects it to run.
+    _hint=""
+    case "$_span" in
+      cd\ *\&\&*) _hint=$(printf '%s' "$_span" | sed -E 's/^cd +([^ ]+) +&&.*/\1/') ;;
+    esac
+    if jq -e --arg s "$_script" '.scripts[$s] // empty' "$_src/package.json" >/dev/null 2>&1; then
+      _where="."
+    else
+      _where=$(find "$_src" -maxdepth 3 -name package.json -not -path '*/node_modules/*' \
+                 -exec sh -c 'jq -e --arg s "$1" ".scripts[\$s] // empty" "$2" >/dev/null 2>&1' _ "$_script" {} \; \
+                 -print 2>/dev/null | head -1 || true)
+      _where="${_where:+$(dirname "${_where#"$_src"/}")}"
+    fi
+    [ -n "$_where" ] || _where="$_hint"
+    if [ -z "$_where" ]; then
+      WARN+=("issue names \`$_pmcmd\` but no package.json in the $_src_label declares a '$_script' script — confirm the command with the user")
+    elif [ "$_where" != "." ]; then
+      WARN+=("issue names \`$_pmcmd\` but '$_script' is NOT a root script — it lives in $_where; run it as: cd $_where && $_pmcmd")
+    fi
+    STATED=$(jq -c --arg c "$_pmcmd" --arg w "${_where:-}" \
+      '. + [{command:$c, dir:(if $w=="" then null else $w end)}]' <<<"$STATED")
+  done <<<"$_spans"
+fi
+
+# uploadScript is emitted so the orchestrator can hand implementers the absolute path rather than
+# making each one repeat the filesystem search — and get it wrong only after doing the capture.
 jq -n --argjson issue "$issue_json" --arg slug "$SLUG" --arg base "$BASE" \
       --arg branch "$BRANCH" --arg wt "$WT" --arg state "$STATE" --argjson cmds "$CMDS" \
-      --argjson stated "$STATED" --argjson dry "$DRY" --args '
+      --arg upload "$UPLOAD" --argjson stated "$STATED" --argjson dry "$DRY" --args '
   {repo:$slug, baseBranch:$base, branch:$branch, worktree:$wt, stateDir:$state, dryRun:$dry,
    issue:{number:$issue.number, title:$issue.title, url:$issue.url,
           state:$issue.state, labels:($issue.labels|map(.name))},
-   commands:$cmds, issueStatedCommands:$stated, warnings:$ARGS.positional}' "${WARN[@]+"${WARN[@]}"}"
+   commands:$cmds, issueStatedCommands:$stated,
+   uploadScript:(if $upload == "" then null else $upload end),
+   warnings:$ARGS.positional}' "${WARN[@]+"${WARN[@]}"}"
