@@ -62,13 +62,19 @@ for arg in "$@"; do
 done
 SLUG="$(repo_slug)"
 
+# `gh api --paginate` emits one JSON array PER PAGE, so past the first page the captured value is
+# several adjacent arrays — not a JSON value, and `jq --argjson` rejects it outright. Slurping and
+# flattening here keeps every caller a single valid array. Done with jq rather than gh's own
+# `--slurp` so this does not require a recent gh.
+api_list() { gh api "$1" --paginate | jq -s 'add // []'; }
+
 snapshot() {
   local head head_at reviews comments issue_comments
   head=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
   head_at=$(gh api "repos/$SLUG/commits/$head" --jq '.commit.committer.date')
-  reviews=$(gh api "repos/$SLUG/pulls/$PR/reviews" --paginate)
-  comments=$(gh api "repos/$SLUG/pulls/$PR/comments" --paginate)
-  issue_comments=$(gh api "repos/$SLUG/issues/$PR/comments" --paginate)
+  reviews=$(api_list "repos/$SLUG/pulls/$PR/reviews")
+  comments=$(api_list "repos/$SLUG/pulls/$PR/comments")
+  issue_comments=$(api_list "repos/$SLUG/issues/$PR/comments")
 
   jq -n \
     --argjson pr "$PR" --arg head "$head" --arg headAt "$head_at" --arg bot "$CODEX_BOT" \
@@ -82,9 +88,13 @@ snapshot() {
   # comment when it does not. Both carry the "Reviewed commit:" line. Reading only reviews makes
   # a comment-shaped verdict invisible, so `watch` sits in `awaiting` for its whole timeout while
   # the review is already sitting on the PR.
-  | (($crev | map({at: .submitted_at, body: (.body // "")}))
-     + ($cic | map({at: .created_at,  body: (.body // "")}))
-     | map(. + {sha: ([ .body | capture("Reviewed commit:[^\n]*?(?<sha>[0-9a-f]{7,40})").sha ] | first)}))
+  # A review carries the commit it judged as metadata (.commit_id); an issue comment can only say
+  # so in prose. Trust the metadata first and fall back to the body, because codex does not always
+  # include the "Reviewed commit:" line — a body-only reading calls a review of head uncovered and
+  # waits forever for one that already exists.
+  | (($crev | map({at: .submitted_at, body: (.body // ""), cid: (.commit_id // null)}))
+     + ($cic | map({at: .created_at,  body: (.body // ""), cid: null}))
+     | map(. + {sha: (([ .body | capture("Reviewed commit:[^\n]*?(?<sha>[0-9a-f]{7,40})").sha ] | first) // .cid)}))
       as $revs
   | ($revs | map(select(.sha as $s | $s != null and ($head | startswith($s))))) as $headRevs
   # Match the trigger only on comments the bot did not write: codex repeats the literal
@@ -151,9 +161,9 @@ case "$CMD" in
 
   findings)
     head=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
-    reviews=$(gh api "repos/$SLUG/pulls/$PR/reviews" --paginate)
-    comments=$(gh api "repos/$SLUG/pulls/$PR/comments" --paginate)
-    issue_comments=$(gh api "repos/$SLUG/issues/$PR/comments" --paginate)
+    reviews=$(api_list "repos/$SLUG/pulls/$PR/reviews")
+    comments=$(api_list "repos/$SLUG/pulls/$PR/comments")
+    issue_comments=$(api_list "repos/$SLUG/issues/$PR/comments")
     jq -n --argjson pr "$PR" --arg head "$head" --arg bot "$CODEX_BOT" --argjson all "$ALL" \
       --argjson reviews "$reviews" --argjson comments "$comments" --argjson ic "$issue_comments" '
       # Codex badge priorities mapped onto a plain severity scale for the resolver.
@@ -188,10 +198,11 @@ case "$CMD" in
             body: $b })) as $f
     # Review bodies come from both delivery shapes, for the same reason as in snapshot().
     | (($reviews | map(select(.user.login == $bot))
-                 | map({at: .submitted_at, body: (.body // "")}))
+                 | map({at: .submitted_at, body: (.body // ""), cid: (.commit_id // "")}))
        + ($ic | map(select(.user.login == $bot))
-              | map({at: .created_at, body: (.body // "")}))
-        | map(select((.body | test("Reviewed commit:[^\n]*?" + $head[0:10])) or $all))
+              | map({at: .created_at, body: (.body // ""), cid: ""}))
+        | map(select((.cid == $head)
+                     or (.body | test("Reviewed commit:[^\n]*?" + $head[0:10])) or $all))
         | map({submittedAt: .at,
                body: (.body | gsub("(?s)<details>.*?</details>"; "") | gsub("\n{3,}"; "\n\n"))})) as $r
     | {pr: $pr, headSha: $head, reviewBodies: $r, findings: $f,

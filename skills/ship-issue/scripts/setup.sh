@@ -194,21 +194,36 @@ if [ -f "$_src/package.json" ]; then
   # Pull every backticked span out of the issue body, then read the command out of the span. The
   # documented monorepo form is `cd apps/foo && pnpm check`, so a pattern anchored on a backtick
   # immediately before the package manager finds nothing at all — silently, which is worse than
-  # not looking. Arguments after the script name (`pnpm test --filter web`) are trimmed the same
-  # way: the script name is what locates the manifest.
+  # not looking.
+  #
+  # Two values come out of each span and they are NOT the same thing:
+  #   _pmcmd  — the full command to RUN, arguments and all. `pnpm test --filter web` and
+  #             `pnpm test` are different gates; a flag can pick the workspace or turn off watch
+  #             mode, so reporting the truncated form lets an agent pass a check it never ran.
+  #   _script — just the script name, used ONLY to locate the manifest that declares it.
   _spans=$(echo "$issue_json" | jq -r '.body // ""' | grep -oE '`[^`]+`' | tr -d '`' | sort -u || true)
   while IFS= read -r _span; do
     [ -n "$_span" ] || continue
-    _pmcmd=$(printf '%s' "$_span" \
-      | grep -oE '(pnpm|npm|yarn|bun)( run)? [a-zA-Z][a-zA-Z0-9:_-]*' | head -1 || true)
-    [ -n "$_pmcmd" ] || continue
-    _script="${_pmcmd##* }"
-    # `cd <dir> && ...` in the issue tells us where the author expects it to run.
-    _hint=""
+    # Strip a leading `cd <dir> &&`, keeping the directory as an explicit hint from the author.
+    _hint=""; _rest="$_span"
     case "$_span" in
-      cd\ *\&\&*) _hint=$(printf '%s' "$_span" | sed -E 's/^cd +([^ ]+) +&&.*/\1/') ;;
+      cd\ *\&\&*)
+        _hint=$(printf '%s' "$_span" | sed -E 's/^cd +([^ ]+) +&&.*/\1/')
+        _rest=$(printf '%s' "$_span" | sed -E 's/^cd +[^ ]+ +&& *//')
+        ;;
     esac
-    if jq -e --arg s "$_script" '.scripts[$s] // empty' "$_src/package.json" >/dev/null 2>&1; then
+    printf '%s' "$_rest" | grep -qE '^(pnpm|npm|yarn|bun)( run)? [a-zA-Z]' || continue
+    _pmcmd="$_rest"                                   # full command, arguments preserved
+    _script=$(printf '%s' "$_rest" \
+      | sed -E 's/^(pnpm|npm|yarn|bun)( run)? +([a-zA-Z][a-zA-Z0-9:_-]*).*/\3/')
+    # An explicit `cd <dir>` from the issue author beats repo-wide discovery: when the root and an
+    # app both declare the same script name, searching first resolves to the wrong package and
+    # every agent then runs the right script in the wrong place. Validate the hint, do not assume.
+    _where=""
+    if [ -n "$_hint" ] && [ -f "$_src/$_hint/package.json" ] \
+       && jq -e --arg s "$_script" '.scripts[$s] // empty' "$_src/$_hint/package.json" >/dev/null 2>&1; then
+      _where="$_hint"
+    elif jq -e --arg s "$_script" '.scripts[$s] // empty' "$_src/package.json" >/dev/null 2>&1; then
       _where="."
     else
       _where=$(find "$_src" -maxdepth 3 -name package.json -not -path '*/node_modules/*' \
@@ -216,8 +231,10 @@ if [ -f "$_src/package.json" ]; then
                  -print 2>/dev/null | head -1 || true)
       _where="${_where:+$(dirname "${_where#"$_src"/}")}"
     fi
-    [ -n "$_where" ] || _where="$_hint"
-    if [ -z "$_where" ]; then
+    if [ -z "$_where" ] && [ -n "$_hint" ]; then
+      WARN+=("issue says to run \`$_pmcmd\` in $_hint but no package.json there declares '$_script' — confirm the command with the user")
+      _where="$_hint"
+    elif [ -z "$_where" ]; then
       WARN+=("issue names \`$_pmcmd\` but no package.json in the $_src_label declares a '$_script' script — confirm the command with the user")
     elif [ "$_where" != "." ]; then
       WARN+=("issue names \`$_pmcmd\` but '$_script' is NOT a root script — it lives in $_where; run it as: cd $_where && $_pmcmd")
