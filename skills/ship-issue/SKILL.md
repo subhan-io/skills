@@ -1,6 +1,14 @@
 ---
 name: ship-issue
-description: Take ONE named GitHub issue end to end in a fresh worktree — plan it with an opus subagent, stop for the human's approval, implement it one sonnet subagent per plan chunk, open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving a green PR for the human to merge. Use when the user points at a specific issue and wants it carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement <issue URL>", "get this ready for me to merge". For the unattended multi-issue pipeline that sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is single-issue, interactive, and always stops for plan approval.
+description: >-
+  Take ONE named GitHub issue end to end in a fresh worktree — plan it with a dedicated planning
+  agent, stop for the human's approval, implement it one fresh agent per plan chunk, open a PR,
+  run it through Codex review, and resolve the findings with a dedicated resolving agent —
+  leaving a green PR for the human to merge. Use when the user points at a specific issue and
+  wants it carried to a mergeable PR: "take issue 12 end to end", "ship this issue",
+  "plan and implement issue URL", "get this ready for me to merge". For the unattended multi-issue pipeline that
+  sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is
+  single-issue, interactive, and always stops for plan approval.
 ---
 
 # Ship one issue, end to end
@@ -29,8 +37,27 @@ A URL naming a different repo than the cwd is a hard error, not a silent retarge
 | `scripts/pr-status.sh <pr>` | the between-steps snapshot: `classification` (conflict/pending/red/green), `behindBase`, `needsRebase`, codex state |
 | `scripts/codex-wait.sh status\|request\|watch\|findings <pr>` | drives the Codex review; `watch` blocks until settled — **always background it** |
 
-**Models:** planner `opus`, chunk implementers `sonnet`, resolver `opus`, rebase/fix `sonnet`.
-Pass via the Agent tool's `model` param at spawn.
+## Runtime adapter
+
+This workflow names **roles**, not required model brands: planner, chunk implementer, resolver,
+and rebase/fix agent. When the runtime supports model selection, prefer `opus` for planner and
+resolver roles and `sonnet` for chunk implementer and rebase/fix roles. When it does not, use a
+fresh available subagent for the role and tell the user about the substitution before spawning;
+never claim a model was selected when the tool cannot select it.
+
+Before setup, inspect the available delegation tools and establish whether they support model
+selection, waiting, and automatic parent resumption. For Codex collaboration tools, read
+[references/codex-runtime.md](references/codex-runtime.md) before spawning the first subagent.
+
+Keep these states distinct throughout the run:
+
+- **agent complete** — the delegated agent returned;
+- **step validated** — the parent inspected the returned artifact and confirmed the step's exit
+  conditions;
+- **workflow complete** — the PR is current, green, and has no unresolved Codex blockers.
+
+Never describe an agent or step completing as the issue being "finished". Only the final handoff
+in step 9 completes this workflow.
 
 **Agent count is not fixed.** The planner decides it: one implementer agent per chunk it returns,
 plus whatever rebase/fix agents the sync check calls for. A five-chunk plan is five implementers,
@@ -93,11 +120,18 @@ only if this issue touches UI — raise it then, before planning, since the alte
 completing a whole capture and finding it has nowhere to publish. The human either installs the
 prerequisites or accepts that UI chunks will report their shots un-capturable.
 
-### 2. Plan — opus subagent
+### 2. Plan — planner agent
 
-Spawn a background Agent with `model: "opus"`, given `planner-prompt.md` with every `{{...}}`
-filled from the setup blob. It reads the code and returns a chunked plan, each chunk sized to
-fit one Claude Code session (~200k tokens) and independently verifiable.
+Spawn a fresh planner agent, using `opus` when model selection is available, given
+`planner-prompt.md` with every `{{...}}` filled from the setup blob. It reads the code and
+returns a chunked plan, each chunk sized to fit one agent session and independently verifiable.
+
+Wait according to the runtime adapter; do not end the parent turn merely because the planner is
+running unless the runtime guarantees automatic continuation. When it returns, the parent must
+validate the plan before presenting it: map every acceptance criterion to a chunk; confirm named
+existing paths and functions from the worktree; confirm every chunk can end green; confirm every
+UI chunk budgets the required screenshot process; and surface every ambiguity rather than
+silently deciding it. An agent's `completed` status is not plan approval or step validation.
 
 ### 3. Approval gate — HARD STOP
 
@@ -127,7 +161,8 @@ reset, not a comment header.
 
 For each chunk in the approved plan, in order:
 
-1. Spawn a background Agent with `model: "sonnet"`, given `implementer-prompt.md` with every
+1. Spawn a fresh implementer agent, using `sonnet` when model selection is available, given
+   `implementer-prompt.md` with every
    `{{...}}` filled: the chunk itself, the plan summary, the full chunk list for orientation,
    `{{SKILL_DIR}}` — this skill's own absolute directory, since the agent reads
    `handoff-prompt.md` out of it — `{{STATE_DIR}}` from the setup blob, where the plan and the
@@ -139,9 +174,10 @@ For each chunk in the approved plan, in order:
    Also hand it `uploadScript` from the setup blob — the absolute path of `pr-media-upload`'s
    `upload.sh`, when setup found one. The agent can search for it, but a path you already have
    beats a search it might get wrong on the first try, after it has done the capture work.
-2. Wait for it to report, then **read the handoff document it names** before spawning the next
-   one. A path that is missing, empty, or describes a chunk that stopped early is a stop, not a
-   detail.
+2. Wait according to the runtime adapter, then **read the handoff document it names** before
+   spawning the next one. Also inspect the branch state and reported verification evidence. A
+   path that is missing, empty, describes a chunk that stopped early, or conflicts with the
+   worktree is a stop, not a detail. Only after these checks is the chunk step validated.
 3. Only when it reports its chunk green and pushed does the next chunk start.
 
 Never spawn the next chunk over a chunk that stopped early, went red, or reported the plan wrong
@@ -188,14 +224,15 @@ Do not merge it, and do not post `@codex review` here — step 7 does that.
 
 Before review, run `scripts/pr-status.sh <pr>`:
 
-- **conflict** → spawn a rebase agent (`sonnet`) in the worktree: `git fetch origin`, hard-reset
+- **conflict** → spawn a rebase agent (prefer `sonnet` when selectable) in the worktree:
+  `git fetch origin`, hard-reset
   to `origin/<branch>`, rebase onto `origin/<base>`. Resolve conflicts preserving the intent of
   both sides; re-run every verification command; force-push `--force-with-lease`. If a hunk is
   genuinely ambiguous — both sides changed the same contract incompatibly — `git rebase --abort`
   and escalate to the user. Never force-push a guess to turn a PR green.
 - **needsRebase** without conflict → same agent, expecting a clean rebase.
-- **red** → spawn a fix agent (`sonnet`): reproduce the failing checks in the worktree, fix the
-  root cause, never weaken tests.
+- **red** → spawn a fix agent (prefer `sonnet` when selectable): reproduce the failing checks in
+  the worktree, fix the root cause, never weaken tests.
 - **pending** → wait; re-check rather than proceeding.
 - **green** → step 7.
 
@@ -212,10 +249,11 @@ since a verdict that arrived in an unexpected shape is indistinguishable from si
 script's level. If it really is silent, say so and hand back to the user; do not re-trigger on a
 loop.
 
-### 8. Resolve — opus subagent
+### 8. Resolve — resolver agent
 
-With the review settled, run `scripts/codex-wait.sh findings <pr>` and spawn a background Agent
-with `model: "opus"`, given `resolver-prompt.md` with the findings inline — and with
+With the review settled, run `scripts/codex-wait.sh findings <pr>` and spawn a fresh resolver
+agent, using `opus` when model selection is available, given `resolver-prompt.md` with the
+findings inline — and with
 `{{ISSUE_STATED_COMMANDS}}` filled, exactly as the implementers got it. A resolver that only
 knows the root commands can fix app-local code and report it verified without ever running the
 gate the issue asked for. It fixes what is right, rebuts what is wrong with evidence, defers what
@@ -254,7 +292,7 @@ anything still open.
   worktree and each one builds on the last.
 - **Never collapse the chunks into one agent** because the issue looks small. If it is genuinely
   one session of work, the planner returns one chunk and that is the same thing.
-- Spawn background agents and end your turn rather than polling; completion notifications
-  re-invoke you.
+- Follow the runtime adapter for agent waiting and resumption. Never assume completion
+  notifications re-invoke the parent unless the active runtime explicitly guarantees it.
 - If reality contradicts expectations (PR closed by hand, branch diverged, issue reassigned),
   report it and prefer doing less over guessing.
