@@ -80,6 +80,11 @@ EOF
 
 The same URLs work in issues and PR/issue comments — anywhere GitHub renders markdown.
 
+- **Self-contained HTML** (`.html`) — served as `text/html`, so the URL opens as a page
+  in any browser. This is how `ship-issue` publishes its plan explainer so a human on
+  another device can read it while the agent runs on a remote box. Only for pages with
+  everything inline; a page that references sibling files has nowhere to load them from.
+
 ## Caveats — read once
 
 - **Public + permanent.** Every uploaded object is world-readable forever (no expiry).
