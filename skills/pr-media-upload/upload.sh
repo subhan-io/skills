@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upload one image/video to the public PR-assets bucket and print its public URL.
+# Upload one image/video/HTML page to the public PR-assets bucket and print its public URL.
 # Usage: upload.sh <file> [content-type-override]
 # Stdout: the public URL only (progress/errors go to stderr) so `url=$(upload.sh f)` is safe.
 #
@@ -41,6 +41,7 @@ if [ -z "$ct" ]; then
     mp4)        ct="video/mp4" ;;
     mov)        ct="video/quicktime" ;;
     webm)       ct="video/webm" ;;
+    html|htm)   ct="text/html; charset=utf-8" ;;   # self-contained pages, e.g. ship-issue's plan explainer
     *)          ct="application/octet-stream" ;;
   esac
 fi

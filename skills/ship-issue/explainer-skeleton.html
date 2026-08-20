@@ -1,0 +1,234 @@
+<!doctype html>
+<!--
+  ship-issue plan explainer — skeleton.
+
+  The planner copies this file to <stateDir>/plan-explainer.html and fills every
+  "FILL:" comment. Rules that keep it a reviewable artifact:
+
+  - Self-contained. No external CSS/JS/fonts/images, no sibling files — it is published to
+    a public, unlisted, permanent URL so the human can read it from any device. Therefore
+    NO SECRETS in excerpts: env values, keys, tokens, connection strings, personal data.
+    Cut the line and write [redacted].
+  - Keep the section order. The reader skims top to bottom and may stop early, so the
+    things that most need a human's eyes come first.
+  - Every section opens with a one-line <p class="tldr"> so a skim still catches it.
+  - Show real code from the worktree (short, exact excerpts with paths), not paraphrase.
+    The reader is a strong engineer who doesn't know THIS codebase: explain its modules,
+    names and conventions; don't explain general concepts.
+  - Delete any section that genuinely has nothing in it — but say so in the TL;DR of the
+    section before it rather than silently dropping it (e.g. "No ambiguities: the issue
+    fully specifies the behaviour.").
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan: #ISSUE_NUMBER — ISSUE_TITLE</title> <!-- FILL -->
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1b1f24; --muted: #59636e; --line: #d9dee3; --soft: #f4f6f8;
+    --accent: #2f6fed; --warn-bg: #fff7e6; --warn-line: #e7b24a; --bad-bg: #fdeeee; --bad-line: #d9534f;
+    --ok-bg: #edf7ee; --ok-line: #4caf50; --code-bg: #f6f8fa; --del: #ffebe9; --add: #dafbe1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --fg: #e6e9ee; --muted: #9aa4af; --line: #2a313a; --soft: #161b22;
+      --accent: #6ea0ff; --warn-bg: #2b2410; --warn-line: #b58a2e; --bad-bg: #2d1717; --bad-line: #c0504c;
+      --ok-bg: #142419; --ok-line: #3f9a48; --code-bg: #161b22; --del: #3a1d1d; --add: #173a22;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 40px 24px 96px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 28px; }
+  header h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.2; }
+  header .meta { color: var(--muted); font-size: 14px; }
+  header .meta a { color: inherit; }
+  nav.toc { font-size: 14px; color: var(--muted); margin-top: 12px; }
+  nav.toc a { color: var(--accent); text-decoration: none; margin-right: 14px; }
+  section { margin: 36px 0; }
+  h2 { font-size: 21px; margin: 0 0 8px; padding-top: 8px; }
+  h3 { font-size: 16px; margin: 22px 0 6px; }
+  p { margin: 8px 0; }
+  p.tldr { font-size: 17px; font-weight: 500; margin-bottom: 14px; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13.5px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 8px 0 14px; }
+  pre code { background: none; padding: 0; }
+  pre .path { display: block; color: var(--muted); margin-bottom: 8px; font-size: 12.5px; }
+  pre .del { display: block; background: var(--del); margin: 0 -14px; padding: 0 14px; }
+  pre .add { display: block; background: var(--add); margin: 0 -14px; padding: 0 14px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 12px 0; background: var(--soft); }
+  .decision { border-left: 4px solid var(--warn-line); background: var(--warn-bg); }
+  .decision .q { font-weight: 600; margin: 0 0 6px; }
+  .decision dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
+  .decision dt { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .03em; padding-top: 2px; }
+  .decision dd { margin: 0; }
+  .risk { border-left: 4px solid var(--bad-line); background: var(--bad-bg); }
+  .ok { border-left: 4px solid var(--ok-line); background: var(--ok-bg); }
+  .chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); vertical-align: middle; margin-left: 6px; }
+  .chip.high { border-color: var(--bad-line); color: var(--bad-line); }
+  .chip.med  { border-color: var(--warn-line); color: var(--warn-line); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+  td code { white-space: nowrap; }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 16px; }
+  .flow .node { border: 1px solid var(--line); background: var(--soft); border-radius: 6px; padding: 8px 12px; font-size: 14px; }
+  .flow .node small { display: block; color: var(--muted); font-size: 12px; }
+  .flow .node.changed { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .flow .arrow { color: var(--muted); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .cols > div > .label { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 4px; }
+  @media (max-width: 700px) { .cols { grid-template-columns: 1fr; } }
+  ul.check { list-style: none; padding: 0; }
+  ul.check li { padding: 6px 0 6px 30px; position: relative; }
+  ul.check li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 16px; height: 16px; border: 2px solid var(--muted); border-radius: 4px; }
+  .muted { color: var(--muted); }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>#ISSUE_NUMBER — ISSUE_TITLE</h1> <!-- FILL -->
+  <div class="meta">
+    <a href="ISSUE_URL">issue</a> · REPO · branch <code>BRANCH</code> off <code>origin/BASE</code> <!-- FILL -->
+    · plan by the ship-issue planner, for approval before any code is written
+  </div>
+  <nav class="toc">
+    <a href="#decide">Decide</a><a href="#ask">The ask</a><a href="#today">Today</a><a href="#change">What changes</a>
+    <a href="#break">What could break</a><a href="#verify">Verification</a><a href="#scope">Not doing</a><a href="#plan">The plan</a>
+  </nav>
+</header>
+
+<section id="decide">
+  <h2>Before you approve: decisions made on your behalf</h2>
+  <p class="tldr"><!-- FILL: one line. How many calls the planner had to make, and which one matters most. --></p>
+  <p class="muted">Each is a place where the issue was silent or ambiguous and the plan picked a side. Approving
+  the plan approves these. If one is wrong, say so — it is far cheaper here than in review.</p>
+
+  <!-- FILL: one .decision card per ambiguity resolved. Order by blast radius, biggest first. -->
+  <div class="card decision">
+    <p class="q">1. <!-- the question, as a question --></p>
+    <dl>
+      <dt>Plan chose</dt><dd><!-- the choice, concretely --></dd>
+      <dt>Instead of</dt><dd><!-- the realistic alternative(s) --></dd>
+      <dt>Because</dt><dd><!-- the evidence from the code or issue that tipped it --></dd>
+      <dt>If wrong</dt><dd><!-- what gets built wrongly and how hard it is to undo after the fact --></dd>
+    </dl>
+  </div>
+
+  <h3>Checklist</h3>
+  <ul class="check">
+    <li>The <a href="#ask">restated ask</a> is what you actually meant by the issue.</li>
+    <li>Each decision above is the one you would have made.</li>
+    <li>Nothing in <a href="#break">what could break</a> is a surprise.</li>
+    <!-- FILL: add issue-specific items the reader should actively confirm -->
+  </ul>
+</section>
+
+<section id="ask">
+  <h2>The ask, restated</h2>
+  <p class="tldr"><!-- FILL: the issue in one sentence, in the planner's own words, not the issue's. --></p>
+  <!-- FILL: a short paragraph or bullets. What the user/caller will be able to do afterwards that they
+       can't today; what "done" looks like from the outside. If the issue names acceptance criteria or
+       commands, list them here verbatim. A reader should be able to spot here if the planner
+       misread the issue. -->
+</section>
+
+<section id="today">
+  <h2>How this area works today</h2>
+  <p class="tldr"><!-- FILL: one line orienting someone who has never opened this repo to the part being touched. --></p>
+  <!-- FILL: orientation for a strong engineer new to THIS codebase. Where the touched code lives,
+       what each module is for, the naming/layout conventions they'd need to know, and how a request
+       or piece of data flows through the files about to change. Use a .flow for the path, marking
+       the nodes this plan changes, and a table for the files. Include 1–3 short real excerpts of the
+       current code with paths — the exact pattern the implementers were told to mirror. -->
+  <div class="flow">
+    <div class="node"><!-- entry point --><small><!-- file --></small></div>
+    <span class="arrow">→</span>
+    <div class="node changed"><!-- a node this plan changes --><small><!-- file --></small></div>
+    <span class="arrow">→</span>
+    <div class="node"><!-- ... --><small><!-- file --></small></div>
+  </div>
+  <table>
+    <thead><tr><th>File</th><th>What it is</th><th>Touched?</th></tr></thead>
+    <tbody>
+      <tr><td><code><!-- path --></code></td><td><!-- role in one line --></td><td><!-- yes: how / no: why it matters anyway --></td></tr>
+    </tbody>
+  </table>
+  <pre><span class="path"><!-- path:lines — what this shows --></span><code><!-- exact current code --></code></pre>
+</section>
+
+<section id="change">
+  <h2>What changes</h2>
+  <p class="tldr"><!-- FILL: one line. The shape of the change and how many chunks. --></p>
+  <!-- FILL: one h3 per chunk, in plan order. For each: what the agent will do in plain terms, then the
+       concrete shape of it — a before/after sketch using .cols, or a pseudo-diff using .del/.add lines
+       inside a <pre>. Name the files and functions. Call out every place where behaviour a caller or
+       user can observe is different afterwards. -->
+  <h3>Chunk 1 — <!-- title --></h3>
+  <p><!-- what and why, 2–4 sentences --></p>
+  <div class="cols">
+    <div><div class="label">Before</div><pre><code><!-- current --></code></pre></div>
+    <div><div class="label">After</div><pre><code><!-- intended --></code></pre></div>
+  </div>
+  <p><strong>Observable difference:</strong> <!-- what a user / caller / test sees that it didn't before --></p>
+</section>
+
+<section id="break">
+  <h2>What could break</h2>
+  <p class="tldr"><!-- FILL: one line. The single biggest risk, or "low risk: ..." with the reason. --></p>
+  <!-- FILL: one .risk card per risk, biggest first, with a severity chip. Existing behaviour that
+       changes, contracts other code depends on, callers outside the listed files, data/migration
+       implications, anything the tests will NOT catch. -->
+  <div class="card risk">
+    <p><strong><!-- risk --></strong><span class="chip high">high</span></p>
+    <p><!-- why it's a risk, what would go wrong, and what in the plan mitigates it (or doesn't) --></p>
+  </div>
+</section>
+
+<section id="verify">
+  <h2>How we'll know it works</h2>
+  <p class="tldr"><!-- FILL: one line. What "green" means for this change. --></p>
+  <!-- FILL: the commands that gate each chunk (the issue-stated ones first, if any), which existing
+       tests cover the area, what new tests the plan adds, and — honestly — what is NOT covered by any
+       automated check and would need a human to try. Screenshots, if UI work: what will be shot. -->
+</section>
+
+<section id="scope">
+  <h2>Deliberately not doing</h2>
+  <p class="tldr"><!-- FILL: one line. --></p>
+  <!-- FILL: bullets. Each with the reason, so the reviewer doesn't flag it and so the reader can
+       object if something here should have been in. -->
+</section>
+
+<section id="plan">
+  <h2>The plan, as the agents will get it</h2>
+  <p class="tldr"><!-- FILL: one line. N chunks, roughly how much context each, run in order. --></p>
+  <table>
+    <thead><tr><th>#</th><th>Chunk</th><th>Files</th><th>Ends green when</th><th>Est. context</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><!-- title --></td><td><!-- paths --></td><td><!-- the check --></td><td><!-- ~Nk tokens --></td></tr>
+    </tbody>
+  </table>
+  <p class="muted">The full chunk text, with every file and function named, is the markdown plan presented
+  alongside this page; it is what each implementer agent is handed, and on approval it is saved as
+  <code>plan.md</code> beside this file. This page is the human-facing view of the same plan.</p>
+</section>
+
+<footer>
+  Generated by the ship-issue planner from the worktree at <code>WORKTREE</code>. <!-- FILL -->
+  Regenerated on every re-plan; the approved version of the plan is written to <code>plan.md</code> in the same directory.
+</footer>
+
+</main>
+</body>
+</html>

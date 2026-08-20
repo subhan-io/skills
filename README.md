@@ -81,6 +81,16 @@ session) → **approval gate** → one sonnet implementer per chunk, run in orde
 → opus resolver, max two resolve rounds. `/ship-issue https://github.com/owner/repo/issues/12`,
 or just `12`.
 
+The approval gate comes with a **plan explainer**: alongside the markdown plan the agents get, the
+planner writes a self-contained `plan-explainer.html` into the run's state directory and the
+orchestrator publishes it through `pr-media-upload` and hands you the URL — so it reads fine from
+your phone while the skill runs on a VPS. (Public-but-unlisted, like the screenshots; the planner
+is told to keep secrets out of its excerpts.) It is written for a strong engineer who doesn't know the codebase
+in question, and it leads with the decisions the planner made where the issue was silent — then
+restates the ask, walks the touched code with real excerpts, shows each chunk before/after, and
+names what could break. The markdown plan is for the implementers; the page is for the approver,
+because a gate nobody reads is not a gate. Re-planning regenerates it.
+
 The chunks are real agent boundaries, not headings in a document: each chunk gets a fresh session
 sized to its own context budget, and has to leave the build green before the next starts. The
 continuity between them is a written handoff — each implementer finishes by compacting its session

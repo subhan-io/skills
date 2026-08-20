@@ -1,6 +1,6 @@
 ---
 name: ship-issue
-description: Take ONE named GitHub issue end to end in a fresh worktree — plan it with an opus subagent, stop for the human's approval, implement it one sonnet subagent per plan chunk, open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving a green PR for the human to merge. Use when the user points at a specific issue and wants it carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement <issue URL>", "get this ready for me to merge". For the unattended multi-issue pipeline that sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is single-issue, interactive, and always stops for plan approval.
+description: Take ONE named GitHub issue end to end in a fresh worktree — plan it with an opus subagent that also writes a visual HTML explainer of the plan, stop for the human's approval, implement it one sonnet subagent per plan chunk, open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving a green PR for the human to merge. Use when the user points at a specific issue and wants it carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement <issue URL>", "get this ready for me to merge". For the unattended multi-issue pipeline that sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is single-issue, interactive, and always stops for plan approval.
 ---
 
 # Ship one issue, end to end
@@ -28,6 +28,10 @@ A URL naming a different repo than the cwd is a hard error, not a silent retarge
 | `scripts/setup.sh <issue> [--dry-run]` | resolves the issue, detects base branch + commands, creates the worktree off the **current** tip of the default branch, returns one JSON blob with `warnings` |
 | `scripts/pr-status.sh <pr>` | the between-steps snapshot: `classification` (conflict/pending/red/green), `behindBase`, `needsRebase`, codex state |
 | `scripts/codex-wait.sh status\|request\|watch\|findings <pr>` | drives the Codex review; `watch` blocks until settled — **always background it** |
+
+Alongside the scripts, the prompts: `planner-prompt.md`, `implementer-prompt.md`,
+`handoff-prompt.md`, `resolver-prompt.md` — and `explainer-skeleton.html`, the HTML shell the
+planner fills to produce the human-facing plan explainer at the approval gate.
 
 **Models:** planner `opus`, chunk implementers `sonnet`, resolver `opus`, rebase/fix `sonnet`.
 Pass via the Agent tool's `model` param at spawn.
@@ -80,8 +84,8 @@ Two fields in the blob are worth more than they look:
   ones: both real, but only one is what the issue is asking you to satisfy. **Pass these to every
   agent**, and prefer them over the generic detection when they disagree.
 - **`stateDir`** — `<repo>/.claude/worktrees/ship-issue-<n>.state/`, beside the worktree rather
-  than inside it, so nothing written there can reach the PR diff. The approved plan and every
-  chunk handoff live here.
+  than inside it, so nothing written there can reach the PR diff. The plan explainer, the
+  approved plan and every chunk handoff live here.
 
 **Read files from the worktree, never from the main checkout.** They are different commits: the
 worktree is cut from `origin/<base>`, while the main checkout is wherever the human left it and is
@@ -89,21 +93,53 @@ routinely behind. A `package.json` read from the wrong one describes a toolchain
 exists, and every agent you brief inherits the error.
 
 A warning about `pr-media-upload` (missing plugin, or `infisical`/`aws` not on `PATH`) matters
-only if this issue touches UI — raise it then, before planning, since the alternative is an agent
-completing a whole capture and finding it has nowhere to publish. The human either installs the
-prerequisites or accepts that UI chunks will report their shots un-capturable.
+twice. Always: it is how the plan explainer gets a URL the human can open from another device —
+this skill usually runs on a remote box, so a file path on it is not something they can read.
+And if the issue touches UI: it is where screenshots get published, and discovering that at the
+publish step wastes a whole capture. Raise it before planning. The human either installs the
+prerequisites, or accepts reading the explainer off the box themselves and UI chunks reporting
+their shots un-capturable.
 
 ### 2. Plan — opus subagent
 
 Spawn a background Agent with `model: "opus"`, given `planner-prompt.md` with every `{{...}}`
-filled from the setup blob. It reads the code and returns a chunked plan, each chunk sized to
-fit one Claude Code session (~200k tokens) and independently verifiable.
+filled from the setup blob — including `{{STATE_DIR}}` and `{{SKILL_DIR}}`, this skill's own
+absolute directory, since the planner reads `explainer-skeleton.html` out of it. It reads the
+code and produces **two things from one understanding**:
+
+- the **chunked plan**, returned as its final text — each chunk sized to fit one Claude Code
+  session (~200k tokens) and independently verifiable. This is what the implementers get.
+- the **explainer**, `<stateDir>/plan-explainer.html` — the same plan re-told for the human who
+  has to approve it: a self-contained page that leads with the decisions the planner made where
+  the issue was silent, then restates the ask, orients the reader in the touched code with real
+  excerpts, shows each chunk as before/after, and names what could break. It is written for a
+  strong engineer who does not know this codebase, and it is the thing the user actually reads.
+
+**Check the explainer exists and is filled before presenting anything** — a file that is missing,
+still the bare skeleton, or a plan returned with no path is an incomplete planning step, not a
+detail. Re-spawn the planner with its own plan inline and ask for the explainer alone rather than
+presenting a plan the user has no good way to review.
 
 ### 3. Approval gate — HARD STOP
 
-Present the plan to the user and **wait**. Do not spawn the implementer, do not create branches,
-do not write code. This is the whole point of the skill's interactive shape: the cheapest place
-to catch a wrong approach is before anything is built.
+**Publish the explainer and put its URL first**, before any of the plan text. This skill runs
+on whatever machine the user pointed it at — usually a remote box — so a path on disk is not
+something they can open from their phone or laptop. Upload it with `uploadScript` from the setup
+blob: `"$uploadScript" <stateDir>/plan-explainer.html` prints one line, a URL that opens as a page
+in any browser (`upload.sh` serves `.html` as `text/html`). Print that URL on its own line at the
+top of your message, with the path beside it. If setup found no `uploadScript`, say so and give
+the path — they will have to fetch it off the box themselves. Never post the explainer to the
+issue or the PR.
+
+The URL is **public but unlisted** (random key, no auth, permanent) — which is why the planner
+is told to keep secrets out of its excerpts, and why you say "unlisted, permanent" when you hand
+it over rather than letting the user assume it is private.
+
+Then present the plan's summary, the decisions it asks them to confirm, and the chunk list; the
+full chunk text is there if they want it but the page is the review surface. Then **wait**. Do not spawn the implementer,
+do not create branches, do not write code. This is the whole point of the skill's interactive
+shape: the cheapest place to catch a wrong approach is before anything is built — and the gate is
+only as good as the reading it gets, which is what the explainer is for.
 
 **On approval, write the plan to `<stateDir>/plan.md` before spawning anything**, along with any
 decisions the human made at the gate — those are part of the plan now, and a chunk agent that
@@ -115,8 +151,12 @@ Do **not** post the plan to the issue instead. The issue is the spec; a chunked 
 plan with token estimates is process ephemera that clutters it for every later reader, and
 re-planning after feedback leaves two comments with no way to tell which is current.
 
-If the user asks for changes, re-spawn the planner with their feedback and present again. Only
-an explicit green light moves to step 4.
+If the user asks for changes, re-spawn the planner with their feedback; it rewrites the plan
+**and** the explainer (overwriting `plan-explainer.html`, so the file always holds the current
+plan), and you publish and present again the same way — each upload is a fresh URL, so name
+the new one and say the old one is stale. Only an explicit green light moves to step 4. The
+explainer stays in the state directory after approval, beside `plan.md` — a later reader of the
+run, or a resumed session, gets the same briefing the approver did.
 
 ### 4. Implement — one sonnet subagent per chunk
 

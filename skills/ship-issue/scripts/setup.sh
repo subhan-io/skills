@@ -98,8 +98,10 @@ codex_seen=$(gh api "repos/$SLUG/pulls/comments?per_page=100" \
 [ "${codex_seen:-0}" -eq 0 ] \
   && WARN+=("no codex review comments found in $SLUG — the Codex GitHub app may not be installed; the review step will time out")
 
-# Screenshot publishing. A UI chunk captures with Playwright and then has to publish through
-# pr-media-upload — a separate plugin needing `infisical` and `aws` on PATH plus credentials.
+# Publishing. The plan explainer is published as a URL so the human can read it from any device
+# (this usually runs on a remote box), and a UI chunk captures with Playwright and then has to
+# publish its shots — both through pr-media-upload, a separate plugin needing `infisical` and `aws`
+# on PATH plus credentials.
 # Discovering that at the publish step means the whole capture is wasted, so check it up front
 # and let the human decide (install the deps, or accept UI chunks reporting un-capturable).
 # Search, don't guess at the depth. The plugin-cache layout nests the skill several levels down
@@ -123,7 +125,7 @@ if [ -z "$UPLOAD" ]; then
   fi
 fi
 if [ -z "$UPLOAD" ]; then
-  WARN+=("pr-media-upload not found — UI chunks will have nowhere to publish screenshots; install the plugin or expect them to report un-capturable")
+  WARN+=("pr-media-upload not found — the plan explainer can only be read from its path on this machine, and UI chunks will have nowhere to publish screenshots; install the plugin or expect both")
 else
   # uuidgen is not a given on a fresh Debian/Alpine box, and upload.sh calls it to build the
   # object key — missing, it fails AFTER the capture work is done, which is the whole thing this
