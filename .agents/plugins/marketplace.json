@@ -1,0 +1,44 @@
+{
+  "name": "subhan-skills",
+  "interface": {
+    "displayName": "Subhan Skills"
+  },
+  "plugins": [
+    {
+      "name": "dispatch-agents",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dispatch-agents"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "ship-issue",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ship-issue"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "pr-media-upload",
+      "source": {
+        "source": "local",
+        "path": "./plugins/pr-media-upload"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

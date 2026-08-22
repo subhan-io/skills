@@ -144,7 +144,7 @@ see.
    layout buries it several levels down:
 
    ```sh
-   upload=$(find "$HOME/.claude/plugins" "$HOME/.claude/skills" \
+   upload=$(find "$HOME/.codex/plugins" "$HOME/.claude/plugins" "$HOME/.claude/skills" \
               -path '*pr-media-upload/upload.sh' -type f -perm -u+x 2>/dev/null | head -1)
    url=$("$upload" ./shot-desktop.png)
    ```

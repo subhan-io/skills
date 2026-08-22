@@ -1,6 +1,15 @@
 ---
 name: ship-issue
-description: Take ONE named GitHub issue end to end in a fresh worktree — confirm the issue's acceptance criteria with the human, plan it with an opus subagent that also writes a visual HTML explainer of the plan, stop for the human's approval, implement it one sonnet subagent per plan chunk, open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving a green PR for the human to merge. Use when the user points at a specific issue and wants it carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement <issue URL>", "get this ready for me to merge". For the unattended multi-issue pipeline that sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is single-issue, interactive, and always stops for plan approval.
+description: >-
+  Take ONE named GitHub issue end to end in a fresh worktree — confirm the issue's acceptance
+  criteria with the human, plan it with an opus subagent that also writes a visual HTML explainer
+  of the plan, stop for the human's approval, implement it one sonnet subagent per plan chunk,
+  open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving
+  a green PR for the human to merge. Use when the user points at a specific issue and wants it
+  carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement
+  this issue URL", "get this ready for me to merge". For the unattended multi-issue pipeline that
+  sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is
+  single-issue, interactive, and always stops for plan approval.
 ---
 
 # Ship one issue, end to end
