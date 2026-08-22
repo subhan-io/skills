@@ -5,230 +5,566 @@
   The planner copies this file to <stateDir>/plan-explainer.html and fills every
   "FILL:" comment. Rules that keep it a reviewable artifact:
 
-  - Self-contained. No external CSS/JS/fonts/images, no sibling files — it is published to
-    a public, unlisted, permanent URL so the human can read it from any device. Therefore
-    NO SECRETS in excerpts: env values, keys, tokens, connection strings, personal data.
-    Cut the line and write [redacted].
-  - Keep the section order. The reader skims top to bottom and may stop early, so the
-    things that most need a human's eyes come first.
-  - Every section opens with a one-line <p class="tldr"> so a skim still catches it.
-  - Show real code from the worktree (short, exact excerpts with paths), not paraphrase.
-    The reader is a strong engineer who doesn't know THIS codebase: explain its modules,
-    names and conventions; don't explain general concepts.
-  - Delete any section that genuinely has nothing in it — but say so in the TL;DR of the
-    section before it rather than silently dropping it (e.g. "No ambiguities: the issue
-    fully specifies the behaviour.").
+  - WRITE IN SIMPLIFIED TECHNICAL ENGLISH (ASD-STE100). One idea per sentence. Max 20
+    words per sentence. Active voice. Present tense. Use the same word for the same
+    thing every time — never a synonym for variety. Say what "it" refers to. Keep code
+    identifiers exact. Short common words: "use", not "utilise"; "start", not "commence".
+    This is a briefing for a person who skims. Plain beats clever.
+  - Self-contained. No external CSS/JS/fonts/images, no sibling files — the page goes to
+    a public, unlisted, permanent URL. So NO SECRETS anywhere: env values, keys, tokens,
+    connection strings, personal data. Cut the line. Write [redacted].
+  - Keep the section order: the ask → today → what changes → what could break →
+    verification → not doing → the plan → endnotes.
+  - SHOW the change. Do not describe it. For UI work, build static mocks from the app's
+    REAL design tokens and component styles (see APP TOKENS and MOCK CSS below). The
+    reader decides from pictures. For other work, show before/after code, pseudo-diffs,
+    and a flow of the touched path.
+  - ASK, do not assume, when the reader must choose. Put the choice in a .q block. The
+    options are the mocks themselves where the question is visual. The sticky button
+    collects every answer as text the reader pastes back in chat. Use a .q block only
+    for a real fork the plan cannot settle alone. A decision you can defend goes in the
+    endnotes instead.
+  - Label every invention. Anything not set by the issue, the code, or a design doc gets
+    an "Invented:" caveat under the element. Every place the code and a doc disagree gets
+    a "Spec disagreement:" caveat.
+  - Real values only. Copy every colour, size, spacing and copy string from a named
+    source file. Cite it in a comment. Never let an invented value read as real.
+  - Delete a section that is empty. Say so in the section before it. Do not drop it in
+    silence.
 -->
-<html lang="en">
+<html lang="en" class="">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plan: #ISSUE_NUMBER — ISSUE_TITLE</title> <!-- FILL -->
 <style>
-  :root {
-    --bg: #ffffff; --fg: #1b1f24; --muted: #59636e; --line: #d9dee3; --soft: #f4f6f8;
-    --accent: #2f6fed; --warn-bg: #fff7e6; --warn-line: #e7b24a; --bad-bg: #fdeeee; --bad-line: #d9534f;
-    --ok-bg: #edf7ee; --ok-line: #4caf50; --code-bg: #f6f8fa; --del: #ffebe9; --add: #dafbe1;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1216; --fg: #e6e9ee; --muted: #9aa4af; --line: #2a313a; --soft: #161b22;
-      --accent: #6ea0ff; --warn-bg: #2b2410; --warn-line: #b58a2e; --bad-bg: #2d1717; --bad-line: #c0504c;
-      --ok-bg: #142419; --ok-line: #3f9a48; --code-bg: #161b22; --del: #3a1d1d; --add: #173a22;
-    }
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0; background: var(--bg); color: var(--fg);
-    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-  main { max-width: 900px; margin: 0 auto; padding: 40px 24px 96px; }
-  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 28px; }
-  header h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.2; }
-  header .meta { color: var(--muted); font-size: 14px; }
-  header .meta a { color: inherit; }
-  nav.toc { font-size: 14px; color: var(--muted); margin-top: 12px; }
-  nav.toc a { color: var(--accent); text-decoration: none; margin-right: 14px; }
-  section { margin: 36px 0; }
-  h2 { font-size: 21px; margin: 0 0 8px; padding-top: 8px; }
-  h3 { font-size: 16px; margin: 22px 0 6px; }
-  p { margin: 8px 0; }
-  p.tldr { font-size: 17px; font-weight: 500; margin-bottom: 14px; }
-  a { color: var(--accent); }
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13.5px; }
-  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
-  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 8px 0 14px; }
-  pre code { background: none; padding: 0; }
-  pre .path { display: block; color: var(--muted); margin-bottom: 8px; font-size: 12.5px; }
-  pre .del { display: block; background: var(--del); margin: 0 -14px; padding: 0 14px; }
-  pre .add { display: block; background: var(--add); margin: 0 -14px; padding: 0 14px; }
-  .card { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 12px 0; background: var(--soft); }
-  .decision { border-left: 4px solid var(--warn-line); background: var(--warn-bg); }
-  .decision .q { font-weight: 600; margin: 0 0 6px; }
-  .decision dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
-  .decision dt { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .03em; padding-top: 2px; }
-  .decision dd { margin: 0; }
-  .risk { border-left: 4px solid var(--bad-line); background: var(--bad-bg); }
-  .ok { border-left: 4px solid var(--ok-line); background: var(--ok-bg); }
-  .chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); vertical-align: middle; margin-left: 6px; }
-  .chip.high { border-color: var(--bad-line); color: var(--bad-line); }
-  .chip.med  { border-color: var(--warn-line); color: var(--warn-line); }
-  table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 15px; }
-  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
-  td code { white-space: nowrap; }
-  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 16px; }
-  .flow .node { border: 1px solid var(--line); background: var(--soft); border-radius: 6px; padding: 8px 12px; font-size: 14px; }
-  .flow .node small { display: block; color: var(--muted); font-size: 12px; }
-  .flow .node.changed { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
-  .flow .arrow { color: var(--muted); }
-  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .cols > div > .label { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 4px; }
-  @media (max-width: 700px) { .cols { grid-template-columns: 1fr; } }
-  ul.check { list-style: none; padding: 0; }
-  ul.check li { padding: 6px 0 6px 30px; position: relative; }
-  ul.check li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 16px; height: 16px; border: 2px solid var(--muted); border-radius: 4px; }
-  .muted { color: var(--muted); }
-  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+/* ===========================================================================
+   PAGE CHROME TOKENS — the explainer's own furniture. Do not restyle these;
+   every run should read the same. Deliberately neutral so the app's own
+   palette (below) is the only brand on the page.
+   =========================================================================== */
+:root {
+  --page:#F2F1EF; --page-ink:#17191C; --page-dim:#5D646B; --page-line:#D9D8D4;
+  --page-panel:#FFFFFF; --page-code:#EAE9E6;
+  --link:#2F6FED;
+  --good:#146B4A; --good-tint:rgba(20,107,74,0.10);
+  --warn:#8A5A00; --warn-tint:rgba(138,90,0,0.11);
+  --bad:#A8121F;  --bad-tint:rgba(168,18,31,0.09);
+  --neutral-tint:rgba(93,100,107,0.11);
+  --diff-del:#ffebe9; --diff-add:#dafbe1;
+}
+html.dark {
+  --page:#0D0E10; --page-ink:#E8EAED; --page-dim:#9BA2AA; --page-line:#282B30;
+  --page-panel:#17191C; --page-code:#1E2126;
+  --link:#6EA0FF;
+  --good:#56C795; --good-tint:rgba(86,199,149,0.14);
+  --warn:#E0A93C; --warn-tint:rgba(224,169,60,0.14);
+  --bad:#F0505E;  --bad-tint:rgba(240,80,94,0.14);
+  --neutral-tint:rgba(155,162,170,0.15);
+  --diff-del:#3a1d1d; --diff-add:#173a22;
+}
+
+/* ===========================================================================
+   APP TOKENS — FILL (UI issues only; delete the block for non-UI issues).
+   Copy the target app's design tokens VERBATIM from its real sources
+   (globals.css / tokens.css / tailwind theme / …) into the .app and
+   html.dark .app scopes. Name the source file and lines in a comment. Mocks
+   render inside .app frames, so they use the app's palette, not the page's.
+   If they look wrong here, they look wrong in the app. Do not hand-tune.
+   =========================================================================== */
+.app {
+  /* FILL: light tokens, verbatim, with source path cited */
+}
+html.dark .app {
+  /* FILL: dark tokens, verbatim, with source path cited */
+}
+
+/* ===========================================================================
+   PAGE CHROME — fixed. */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{margin:0;padding:0}
+body{
+  font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--page); color:var(--page-ink);
+  -webkit-font-smoothing:antialiased;
+  font-size:14px; line-height:1.6;
+  padding:0 0 110px;
+}
+.wrap{max-width:1280px;margin:0 auto;padding:0 24px}
+header.top{
+  position:sticky;top:0;z-index:60;background:var(--page);
+  border-bottom:1px solid var(--page-line);padding:16px 24px 14px;margin-bottom:28px;
+}
+header.top .wrap{padding:0}
+h1{font-size:19px;font-weight:750;letter-spacing:-0.02em;margin:0 0 6px}
+.lede{font-size:13px;line-height:1.55;color:var(--page-dim);max-width:82ch;margin:0}
+.lede b{color:var(--page-ink);font-weight:650}
+.lede a{color:var(--link);text-decoration:none}
+.toprow{display:flex;gap:20px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.toggle{
+  flex:none;appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;
+  border:1px solid var(--page-line);background:var(--page);color:var(--page-ink);
+  border-radius:999px;padding:8px 14px;display:inline-flex;gap:8px;align-items:center;
+}
+.toggle:hover{border-color:var(--page-dim)}
+h2.sec{
+  font-size:15.5px;font-weight:750;letter-spacing:-0.02em;margin:44px 0 4px;
+  padding-top:20px;border-top:1px solid var(--page-line);
+}
+h2.sec:first-of-type{border-top:0;padding-top:0}
+.sechint{font-size:12.5px;line-height:1.55;color:var(--page-dim);margin:0 0 18px;max-width:82ch}
+.sechint b{color:var(--page-ink);font-weight:650}
+h3{font-size:13.5px;font-weight:750;letter-spacing:-0.01em;margin:26px 0 6px}
+p{margin:8px 0;max-width:82ch}
+a{color:var(--link)}
+ul,ol{max-width:82ch;margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+strong,b{font-weight:650}
+code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.92em;
+  background:var(--page-code);padding:1px 4px;border-radius:3px;
+}
+pre{
+  background:var(--page-panel);border:1px solid var(--page-line);border-radius:8px;
+  padding:12px 14px;overflow-x:auto;margin:10px 0 14px;max-width:100%;
+  font-size:12.5px;line-height:1.5;
+}
+pre code{background:none;padding:0;font-size:inherit}
+pre .path{display:block;color:var(--page-dim);margin-bottom:8px;font-size:11.5px}
+pre .del{display:block;background:var(--diff-del);margin:0 -14px;padding:0 14px}
+pre .add{display:block;background:var(--diff-add);margin:0 -14px;padding:0 14px}
+
+/* labels, captions, badges */
+.optlabel{font-size:13px;font-weight:700;letter-spacing:-0.01em;margin:0 0 3px}
+.opttrade{font-size:11.5px;line-height:1.5;color:var(--page-dim);margin:0 0 10px}
+.caveat{
+  font-size:11px;line-height:1.5;color:var(--page-dim);margin:8px 0 0;max-width:72ch;
+  padding-left:10px;border-left:2px solid var(--page-line);
+}
+.caveat b{color:var(--page-ink);font-weight:650}
+.badge{
+  display:inline-block;font-size:9.5px;font-weight:750;letter-spacing:0.06em;
+  text-transform:uppercase;padding:2px 6px;border-radius:3px;vertical-align:2px;margin-left:6px;
+}
+.badge.build{background:var(--good-tint);color:var(--good)}
+.badge.no{background:var(--bad-tint);color:var(--bad)}
+.badge.alt{background:var(--neutral-tint);color:var(--page-dim)}
+.badge.ask{background:var(--warn-tint);color:var(--warn)}
+.badge.risk-high{background:var(--bad-tint);color:var(--bad)}
+.badge.risk-med{background:var(--warn-tint);color:var(--warn)}
+.badge.risk-low{background:var(--neutral-tint);color:var(--page-dim)}
+
+/* option grids + mock frames */
+.grid{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin:14px 0}
+.opt{width:390px;flex:none}
+.opt.wide{width:560px}
+.frame{
+  border:1px solid var(--page-line);border-radius:12px;overflow:hidden;
+  box-shadow:0 10px 30px -14px rgba(0,0,0,0.35);
+}
+.frame.phone{width:390px;border-radius:18px}
+.frame .notch{height:22px;display:flex;align-items:center;justify-content:center}
+.frame .notch i{display:block;width:78px;height:5px;border-radius:99px;opacity:.25;background:currentColor}
+.stage{position:relative;overflow:hidden}
+
+/* before/after columns for non-UI chunks */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0 14px}
+.cols .label{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--page-dim);margin-bottom:4px;font-weight:700}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+
+/* flow diagram of the touched path */
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0 16px}
+.flow .node{border:1px solid var(--page-line);background:var(--page-panel);border-radius:6px;padding:7px 11px;font-size:12.5px}
+.flow .node small{display:block;color:var(--page-dim);font-size:10.5px}
+.flow .node.changed{border-color:var(--link);box-shadow:inset 3px 0 0 var(--link)}
+.flow .arrow{color:var(--page-dim)}
+
+/* prose tables (file table, plan table) */
+table.meta{border-collapse:collapse;width:100%;margin:10px 0 16px;font-size:12.5px}
+table.meta th,table.meta td{text-align:left;vertical-align:top;padding:7px 10px;border-bottom:1px solid var(--page-line)}
+table.meta th{color:var(--page-dim);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em}
+
+/* acceptance criteria checklist */
+ul.criteria{list-style:none;padding:0;max-width:82ch}
+ul.criteria li{padding:5px 0 5px 28px;position:relative}
+ul.criteria li::before{
+  content:"";position:absolute;left:2px;top:9px;width:14px;height:14px;
+  border:2px solid var(--page-dim);border-radius:4px;
+}
+ul.criteria li .flag{color:var(--warn);font-weight:650}
+
+/* ===========================================================================
+   QUESTIONS — the form. Present only when the plan needs the reader to choose.
+   Each .q carries data-question. Each option carries data-answer. The sticky
+   bar copies every question and answer as plain text.
+   =========================================================================== */
+.q{
+  border:1px solid var(--page-line);border-left:3px solid var(--warn);border-radius:10px;
+  background:var(--page-panel);padding:16px 18px;margin:20px 0 26px;
+}
+.qlabel{font-size:13.5px;font-weight:750;letter-spacing:-0.01em;margin:0 0 4px}
+.qhint{font-size:12px;line-height:1.55;color:var(--page-dim);margin:0 0 12px;max-width:82ch}
+.q .grid{margin:0}
+.opt.qopt{
+  width:auto;cursor:pointer;border:1px solid var(--page-line);border-radius:10px;
+  padding:12px;background:var(--page);
+}
+.opt.qopt.picked{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-tint)}
+.opt.qopt .frame{box-shadow:none}
+.optpick{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin:0 0 6px;cursor:pointer}
+.optpick input{width:15px;height:15px;accent-color:var(--warn);flex:none;margin:0}
+.qnote{
+  display:block;width:100%;max-width:82ch;margin-top:12px;font:inherit;font-size:12.5px;
+  padding:8px 10px;border-radius:8px;border:1px solid var(--page-line);
+  background:var(--page);color:var(--page-ink);resize:vertical;
+}
+.qnote:focus{outline:none;border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-tint)}
+.qbar{
+  position:fixed;right:20px;bottom:20px;z-index:80;display:flex;align-items:center;gap:12px;
+  background:var(--page-panel);border:1px solid var(--page-line);border-radius:999px;
+  padding:8px 8px 8px 16px;box-shadow:0 10px 30px -10px rgba(0,0,0,0.45);
+}
+.qcount{font-size:12px;color:var(--page-dim);white-space:nowrap}
+.qcopy{
+  appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:700;
+  border:0;border-radius:999px;padding:9px 16px;background:var(--page-ink);color:var(--page);
+}
+.qcopy:hover{opacity:.88}
+
+/* endnotes */
+.notes{margin-top:44px;padding-top:20px;border-top:1px solid var(--page-line)}
+.notes h3{font-size:13.5px;font-weight:750;margin:0 0 10px}
+.notes ol{margin:0;padding-left:20px;max-width:90ch}
+.notes li{font-size:12.5px;line-height:1.65;color:var(--page-dim);margin-bottom:10px}
+.notes li b{color:var(--page-ink);font-weight:650}
+footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--page-line);color:var(--page-dim);font-size:11.5px}
+
+/* ===========================================================================
+   MOCK CSS — FILL (UI issues only; delete for non-UI issues).
+   The component styles for the mocks: rows, pills, buttons, dialogs, inputs —
+   whatever the change touches. Lift every value from a real source and CITE
+   it beside the rule, the same way as the app tokens. Where you invent a
+   value, say so in the comment AND in an "Invented:" caveat under the mock.
+   =========================================================================== */
 </style>
 </head>
 <body>
-<main>
 
-<header>
-  <h1>#ISSUE_NUMBER — ISSUE_TITLE</h1> <!-- FILL -->
-  <div class="meta">
-    <a href="ISSUE_URL">issue</a> · REPO · branch <code>BRANCH</code> off <code>origin/BASE</code> <!-- FILL -->
-    · plan by the ship-issue planner, for approval before any code is written
+<header class="top">
+  <div class="wrap toprow">
+    <div>
+      <h1>#ISSUE_NUMBER — ISSUE_TITLE</h1> <!-- FILL -->
+      <p class="lede">
+        <b>This is a plan. Nothing is built yet.</b>
+        <a href="ISSUE_URL">issue</a> · REPO · branch <code>BRANCH</code> off <code>origin/BASE</code>. <!-- FILL -->
+        <!-- FILL: two or three short sentences. Say what the reader approves. Then send
+             them to the parts that need them: name the open questions and the endnotes
+             that matter, with anchor links. If the page has questions, say that the
+             sticky button copies the answers. If the mocks use real app tokens, name the
+             files they come from. -->
+      </p>
+    </div>
+    <button class="toggle" id="themeBtn" type="button" aria-pressed="false">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <span id="themeLabel">Light — switch to dark</span>
+    </button>
   </div>
-  <nav class="toc">
-    <a href="#decide">Decide</a><a href="#ask">The ask</a><a href="#today">Today</a><a href="#change">What changes</a>
-    <a href="#break">What could break</a><a href="#verify">Verification</a><a href="#scope">Not doing</a><a href="#plan">The plan</a>
-  </nav>
 </header>
 
-<section id="decide">
-  <h2>Before you approve: decisions made on your behalf</h2>
-  <p class="tldr"><!-- FILL: one line. How many calls the planner had to make, and which one matters most. --></p>
-  <p class="muted">Each is a place where the issue was silent or ambiguous and the plan picked a side. Approving
-  the plan approves these. If one is wrong, say so — it is far cheaper here than in review.</p>
+<div class="wrap">
 
-  <!-- FILL: one .decision card per ambiguity resolved. Order by blast radius, biggest first. -->
-  <div class="card decision">
-    <p class="q">1. <!-- the question, as a question --></p>
-    <dl>
-      <dt>Plan chose</dt><dd><!-- the choice, concretely --></dd>
-      <dt>Instead of</dt><dd><!-- the realistic alternative(s) --></dd>
-      <dt>Because</dt><dd><!-- the evidence from the code or issue that tipped it --></dd>
-      <dt>If wrong</dt><dd><!-- what gets built wrongly and how hard it is to undo after the fact --></dd>
-    </dl>
+<!-- =====================================================================
+     1 · THE ASK
+     ===================================================================== -->
+<h2 class="sec" id="ask">1 · The ask</h2>
+<p class="sechint"><!-- FILL: the issue in one short sentence, in your words, not the issue's. --></p>
+<!-- FILL: one short paragraph. What can the user or caller do after this that they cannot
+     do today? What does "done" look like from outside? A reader must be able to see here
+     that you read the issue correctly. -->
+
+<h3>Acceptance criteria, from the issue</h3>
+<p class="sechint">You agreed this list before planning. Read it again. The plan builds to this
+list and nothing else.</p>
+<ul class="criteria">
+  <!-- FILL: one li per criterion, quoted word for word. Mark any line that changed at the
+       criteria check: append <span class="flag">— corrected: …</span> or
+       <span class="flag">— added</span>. If a criterion states something false about the
+       code, keep the words and flag the correction the same way. If the issue lists no
+       criteria, delete this list. Then give the criteria the plan treats as "done". -->
+  <li><!-- criterion --></li>
+</ul>
+
+<!-- =====================================================================
+     2 · TODAY
+     ===================================================================== -->
+<h2 class="sec" id="today">2 · How this code works today</h2>
+<p class="sechint"><!-- FILL: one short line about the part you touch. --></p>
+<!-- FILL: The reader knows this repo's stack, layout, package manager and test setup.
+     DO NOT explain them. No "repo shape" paragraph, no tour of the monorepo, no notes
+     about where tests live or how they run.
+
+     Write only what is specific to the code that changes:
+       - which files change, and what each one does (table.meta);
+       - how data moves through them (.flow, with the changed nodes marked);
+       - the exact defect or gap, as a real excerpt with a path;
+       - the pattern the implementers must copy, as a real excerpt with a path.
+     For UI work, a mock of the CURRENT screen beats a paragraph about it. Cut anything
+     the reader can guess. -->
+<div class="flow">
+  <div class="node"><!-- entry point --><small><!-- file --></small></div>
+  <span class="arrow">→</span>
+  <div class="node changed"><!-- a node this plan changes --><small><!-- file --></small></div>
+  <span class="arrow">→</span>
+  <div class="node"><!-- ... --><small><!-- file --></small></div>
+</div>
+<table class="meta">
+  <thead><tr><th>File</th><th>What it is</th><th>Touched?</th></tr></thead>
+  <tbody>
+    <tr><td><code><!-- path --></code></td><td><!-- role in one line --></td><td><!-- yes: how / no: why it still matters --></td></tr>
+  </tbody>
+</table>
+<pre><span class="path"><!-- path:lines — what this shows --></span><code><!-- exact current code --></code></pre>
+
+<!-- =====================================================================
+     3 · WHAT CHANGES — shown, not described
+     ===================================================================== -->
+<h2 class="sec" id="change">3 · What changes</h2>
+<p class="sechint"><!-- FILL: one short line. The shape of the change, and how many chunks. --></p>
+<!-- FILL: one h3 per chunk, in plan order. This is the heart of the page. It is VISUAL.
+
+     For each chunk: two to four short sentences, then the demonstration.
+
+     - UI chunk → a static mock inside an .app .frame (or .frame.phone at the target
+       width). Build it from the APP TOKENS and MOCK CSS above. Use realistic content.
+       Where the plan had real alternatives, show them side by side in a .grid of .opt
+       blocks. Badge each one: <span class="badge build">planned</span>,
+       <span class="badge no">declined</span>, <span class="badge alt">alternative</span>.
+       Give each an .opttrade line with the trade-off.
+     - Non-UI chunk → a before/after in .cols, a pseudo-diff (<pre> with .del/.add), or a
+       .flow of the new path. Name files and functions exactly.
+
+     Under every mock, add .caveat blocks: <b>Invented:</b> for anything the issue, the
+     code and the design docs do not set; <b>Spec disagreement:</b> where the code and a
+     doc disagree — say which one the mock follows.
+
+     End each chunk with the observable difference: what a user, caller or test sees
+     afterwards that it did not see before. -->
+
+<h3>Chunk 1 — <!-- title --></h3>
+<p><!-- what and why, two to four short sentences --></p>
+<div class="grid">
+  <div class="opt">
+    <p class="optlabel"><!-- variant name --> <span class="badge build">planned</span></p>
+    <p class="opttrade"><!-- the trade-off, one or two short lines --></p>
+    <div class="app frame"><!-- the mock --></div>
+    <p class="caveat"><b>Invented:</b> <!-- what, and why --></p>
   </div>
+</div>
+<p><strong>Observable difference:</strong> <!-- what a user / caller / test sees that it did not before --></p>
 
-  <h3>Checklist</h3>
-  <ul class="check">
-    <li>The <a href="#ask">restated ask</a> is what you actually meant by the issue.</li>
-    <li>Each decision above is the one you would have made.</li>
-    <li>Nothing in <a href="#break">what could break</a> is a surprise.</li>
-    <!-- FILL: add issue-specific items the reader should actively confirm -->
-  </ul>
-</section>
-
-<section id="ask">
-  <h2>The ask, restated</h2>
-  <p class="tldr"><!-- FILL: the issue in one sentence, in the planner's own words, not the issue's. --></p>
-  <!-- FILL: a short paragraph or bullets. What the user/caller will be able to do afterwards that they
-       can't today; what "done" looks like from the outside. If the issue names acceptance criteria or
-       commands, list them here verbatim. A reader should be able to spot here if the planner
-       misread the issue. -->
-</section>
-
-<section id="today">
-  <h2>How this area works today</h2>
-  <p class="tldr"><!-- FILL: one line orienting someone who has never opened this repo to the part being touched. --></p>
-  <!-- FILL: orientation for a strong engineer new to THIS codebase. Where the touched code lives,
-       what each module is for, the naming/layout conventions they'd need to know, and how a request
-       or piece of data flows through the files about to change. Use a .flow for the path, marking
-       the nodes this plan changes, and a table for the files. Include 1–3 short real excerpts of the
-       current code with paths — the exact pattern the implementers were told to mirror. -->
-  <div class="flow">
-    <div class="node"><!-- entry point --><small><!-- file --></small></div>
-    <span class="arrow">→</span>
-    <div class="node changed"><!-- a node this plan changes --><small><!-- file --></small></div>
-    <span class="arrow">→</span>
-    <div class="node"><!-- ... --><small><!-- file --></small></div>
+<!-- FILL: a question block, where the plan needs the reader to choose. Put it next to
+     the thing it is about — a UI question sits under the mocks that show the options.
+     Delete the block if the plan has no open question. Rules:
+       - data-question holds the question text. data-answer holds the answer text. Both
+         go into the copied text, so write them as full, standalone sentences.
+       - The radio name must be unique per question.
+       - For a free-text question, keep the .qnote and drop the options.
+       - Ask only about a real fork you cannot settle. Anything you can defend belongs in
+         the endnotes, not here. -->
+<div class="q" id="q1" data-question="FILL: the question, as one short sentence.">
+  <p class="qlabel">Q1 · <!-- the question --> <span class="badge ask">needs your answer</span></p>
+  <p class="qhint"><!-- FILL: why it matters, and what happens either way. Two short lines. --></p>
+  <div class="grid">
+    <div class="opt qopt">
+      <label class="optpick"><input type="radio" name="q1" data-answer="FILL: option A, in words."> <span>A. <!-- short name --></span></label>
+      <p class="opttrade"><!-- the trade-off --></p>
+      <div class="app frame"><!-- the mock for option A --></div>
+    </div>
+    <div class="opt qopt">
+      <label class="optpick"><input type="radio" name="q1" data-answer="FILL: option B, in words."> <span>B. <!-- short name --></span></label>
+      <p class="opttrade"><!-- the trade-off --></p>
+      <div class="app frame"><!-- the mock for option B --></div>
+    </div>
   </div>
-  <table>
-    <thead><tr><th>File</th><th>What it is</th><th>Touched?</th></tr></thead>
-    <tbody>
-      <tr><td><code><!-- path --></code></td><td><!-- role in one line --></td><td><!-- yes: how / no: why it matters anyway --></td></tr>
-    </tbody>
-  </table>
-  <pre><span class="path"><!-- path:lines — what this shows --></span><code><!-- exact current code --></code></pre>
-</section>
+  <textarea class="qnote" data-note rows="2" placeholder="Another answer, or a note (optional)"></textarea>
+</div>
 
-<section id="change">
-  <h2>What changes</h2>
-  <p class="tldr"><!-- FILL: one line. The shape of the change and how many chunks. --></p>
-  <!-- FILL: one h3 per chunk, in plan order. For each: what the agent will do in plain terms, then the
-       concrete shape of it — a before/after sketch using .cols, or a pseudo-diff using .del/.add lines
-       inside a <pre>. Name the files and functions. Call out every place where behaviour a caller or
-       user can observe is different afterwards. -->
-  <h3>Chunk 1 — <!-- title --></h3>
-  <p><!-- what and why, 2–4 sentences --></p>
-  <div class="cols">
-    <div><div class="label">Before</div><pre><code><!-- current --></code></pre></div>
-    <div><div class="label">After</div><pre><code><!-- intended --></code></pre></div>
-  </div>
-  <p><strong>Observable difference:</strong> <!-- what a user / caller / test sees that it didn't before --></p>
-</section>
+<!-- =====================================================================
+     4 · WHAT COULD BREAK
+     ===================================================================== -->
+<h2 class="sec" id="break">4 · What could break</h2>
+<p class="sechint"><!-- FILL: one short line. The biggest risk, or "low risk" and why. --></p>
+<!-- FILL: one h3 per risk, biggest first. Put a severity badge in the title
+     (<span class="badge risk-high">high</span> / risk-med / risk-low). Cover behaviour
+     that changes, contracts other code depends on, callers outside the listed files,
+     data effects, and what the checks will NOT catch. -->
+<h3><!-- risk --> <span class="badge risk-high">high</span></h3>
+<p><!-- why it is a risk, what goes wrong, and what in the plan reduces it (or does not) --></p>
 
-<section id="break">
-  <h2>What could break</h2>
-  <p class="tldr"><!-- FILL: one line. The single biggest risk, or "low risk: ..." with the reason. --></p>
-  <!-- FILL: one .risk card per risk, biggest first, with a severity chip. Existing behaviour that
-       changes, contracts other code depends on, callers outside the listed files, data/migration
-       implications, anything the tests will NOT catch. -->
-  <div class="card risk">
-    <p><strong><!-- risk --></strong><span class="chip high">high</span></p>
-    <p><!-- why it's a risk, what would go wrong, and what in the plan mitigates it (or doesn't) --></p>
-  </div>
-</section>
+<!-- =====================================================================
+     5 · VERIFICATION
+     ===================================================================== -->
+<h2 class="sec" id="verify">5 · How we know it works</h2>
+<p class="sechint"><!-- FILL: one short line. What "green" means here. --></p>
+<!-- FILL: the commands that gate each chunk (the issue's own commands first), which
+     existing tests cover this code, which tests the plan adds, and — honestly — what no
+     check catches. Name what a human must look at. For UI work, say what gets shot. -->
 
-<section id="verify">
-  <h2>How we'll know it works</h2>
-  <p class="tldr"><!-- FILL: one line. What "green" means for this change. --></p>
-  <!-- FILL: the commands that gate each chunk (the issue-stated ones first, if any), which existing
-       tests cover the area, what new tests the plan adds, and — honestly — what is NOT covered by any
-       automated check and would need a human to try. Screenshots, if UI work: what will be shot. -->
-</section>
+<!-- =====================================================================
+     6 · NOT DOING
+     ===================================================================== -->
+<h2 class="sec" id="scope">6 · Deliberately not doing</h2>
+<p class="sechint"><!-- FILL: one short line. --></p>
+<!-- FILL: bullets. Give the reason for each one. The reviewer must not flag it, and the
+     reader must be able to object if something here belongs in. -->
 
-<section id="scope">
-  <h2>Deliberately not doing</h2>
-  <p class="tldr"><!-- FILL: one line. --></p>
-  <!-- FILL: bullets. Each with the reason, so the reviewer doesn't flag it and so the reader can
-       object if something here should have been in. -->
-</section>
+<!-- =====================================================================
+     7 · THE PLAN
+     ===================================================================== -->
+<h2 class="sec" id="plan">7 · The plan, as the agents get it</h2>
+<p class="sechint"><!-- FILL: one short line. N chunks, in order, with rough context each. --></p>
+<table class="meta">
+  <thead><tr><th>#</th><th>Chunk</th><th>Files</th><th>Ends green when</th><th>Est. context</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><!-- title --></td><td><!-- paths --></td><td><!-- the check --></td><td><!-- ~Nk tokens --></td></tr>
+  </tbody>
+</table>
+<p class="sechint">The full chunk text names every file and function. It is the markdown plan next
+to this page. Each implementer agent gets that text. On approval it is saved as
+<code>plan.md</code> beside this file.</p>
 
-<section id="plan">
-  <h2>The plan, as the agents will get it</h2>
-  <p class="tldr"><!-- FILL: one line. N chunks, roughly how much context each, run in order. --></p>
-  <table>
-    <thead><tr><th>#</th><th>Chunk</th><th>Files</th><th>Ends green when</th><th>Est. context</th></tr></thead>
-    <tbody>
-      <tr><td>1</td><td><!-- title --></td><td><!-- paths --></td><td><!-- the check --></td><td><!-- ~Nk tokens --></td></tr>
-    </tbody>
-  </table>
-  <p class="muted">The full chunk text, with every file and function named, is the markdown plan presented
-  alongside this page; it is what each implementer agent is handed, and on approval it is saved as
-  <code>plan.md</code> beside this file. This page is the human-facing view of the same plan.</p>
-</section>
+<!-- =====================================================================
+     ENDNOTES — the decisions, in one place
+     ===================================================================== -->
+<div class="notes" id="notes">
+  <h3>Decisions made for you — read before you approve</h3>
+  <p class="sechint">The issue was silent or unclear in these places, and the plan picked a side.
+  Places where the code and a spec disagree are here too. The badges and caveats above point
+  here. This is the full list. If one is wrong, say so now. It is much cheaper here than in
+  review.</p>
+  <ol>
+    <!-- FILL: one li per decision. Biggest blast radius first. One running entry each:
+         <b>the question.</b> Chose X over Y because <evidence>. If wrong: <what gets built
+         wrongly, and how hard it is to undo>. Link to the mock or section that shows it,
+         e.g. <a href="#change">§3, chunk 1</a>. Spec disagreements read the same way.
+         If there were none, replace the list with one line that says so. -->
+    <li><b><!-- question --></b> <!-- chose / instead of / because / if wrong --></li>
+  </ol>
+</div>
 
 <footer>
-  Generated by the ship-issue planner from the worktree at <code>WORKTREE</code>. <!-- FILL -->
-  Regenerated on every re-plan; the approved version of the plan is written to <code>plan.md</code> in the same directory.
+  Written by the ship-issue planner from the worktree at <code>WORKTREE</code>. <!-- FILL -->
+  It is rewritten on every re-plan. The approved plan is saved as <code>plan.md</code> in the same
+  directory. This page sits at an unlisted, permanent URL.
 </footer>
 
-</main>
+</div>
+
+<div class="qbar" id="qbar" hidden>
+  <span class="qcount" id="qcount"></span>
+  <button class="qcopy" id="qcopy" type="button">Copy Q&amp;A</button>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById("themeBtn");
+  var label = document.getElementById("themeLabel");
+  if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    root.classList.add("dark");
+  }
+  function syncTheme() {
+    var dark = root.classList.contains("dark");
+    btn.setAttribute("aria-pressed", String(dark));
+    label.textContent = dark ? "Dark — switch to light" : "Light — switch to dark";
+  }
+  btn.addEventListener("click", function () { root.classList.toggle("dark"); syncTheme(); });
+  syncTheme();
+
+  // ---- questions -----------------------------------------------------
+  var questions = Array.prototype.slice.call(document.querySelectorAll(".q"));
+  var bar = document.getElementById("qbar");
+  var count = document.getElementById("qcount");
+  var copy = document.getElementById("qcopy");
+  if (!questions.length) return;
+  bar.hidden = false;
+
+  function picked(q) {
+    var radio = q.querySelector("input[type=radio]:checked");
+    var note = q.querySelector("[data-note]");
+    return {
+      question: q.getAttribute("data-question") || "",
+      answer: radio ? (radio.getAttribute("data-answer") || "") : "",
+      note: note && note.value.trim() ? note.value.trim() : ""
+    };
+  }
+  function answered() {
+    return questions.filter(function (q) {
+      var a = picked(q);
+      return a.answer || a.note;
+    }).length;
+  }
+  function syncCount() {
+    count.textContent = answered() + " of " + questions.length + " answered";
+  }
+  questions.forEach(function (q) {
+    q.querySelectorAll(".qopt").forEach(function (card) {
+      card.addEventListener("click", function (e) {
+        if (e.target.closest("a") || e.target.tagName === "TEXTAREA") return;
+        var radio = card.querySelector("input[type=radio]");
+        if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event("change", {bubbles:true})); }
+      });
+    });
+    q.addEventListener("change", function () {
+      q.querySelectorAll(".qopt").forEach(function (card) {
+        var radio = card.querySelector("input[type=radio]");
+        card.classList.toggle("picked", !!(radio && radio.checked));
+      });
+      syncCount();
+    });
+    var note = q.querySelector("[data-note]");
+    if (note) note.addEventListener("input", syncCount);
+  });
+  syncCount();
+
+  function transcript() {
+    var lines = [document.title, ""];
+    questions.forEach(function (q, i) {
+      var a = picked(q);
+      lines.push("Q" + (i + 1) + ". " + a.question);
+      if (a.answer) lines.push("A" + (i + 1) + ". " + a.answer);
+      else if (a.note) lines.push("A" + (i + 1) + ". (see note)");
+      else lines.push("A" + (i + 1) + ". not answered — keep the plan's default");
+      if (a.note) lines.push("Note: " + a.note);
+      lines.push("");
+    });
+    return lines.join("\n").trim() + "\n";
+  }
+  function flash(text) {
+    var old = copy.textContent;
+    copy.textContent = text;
+    setTimeout(function () { copy.textContent = old; }, 1600);
+  }
+  copy.addEventListener("click", function () {
+    var text = transcript();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("Copied ✓"); }, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+      document.body.removeChild(ta);
+      flash(ok ? "Copied ✓" : "Press Ctrl+C");
+    }
+  });
+})();
+</script>
 </body>
 </html>

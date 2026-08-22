@@ -7,6 +7,14 @@ You are planning the implementation of GitHub issue **#{{ISSUE_NUMBER}}** in `{{
 {{ISSUE_BODY}}
 ```
 
+The ask and the issue's acceptance criteria were confirmed with the human before you were
+spawned. The outcome — corrections, additions, criteria confirmed as-is — is:
+
+{{CRITERIA_NOTES}}
+
+Treat these as part of the issue: a correction here overrides the issue text, and the explainer's
+criteria list must carry these flags so the human can see their answers were heard.
+
 Work in the worktree `{{WORKTREE}}` (branch `{{BRANCH}}`, cut from `origin/{{BASE_BRANCH}}`).
 You are planning only — **write no implementation code and push nothing.** The one file you
 write is the explainer described below, and it goes in the run's state directory
@@ -76,47 +84,96 @@ else as well: **`{{STATE_DIR}}/plan-explainer.html`**, written by you, which the
 browser and read before saying yes. Write it **after** the plan is settled, from the same
 understanding, so the two never disagree — and name its absolute path in your final message.
 
-Why it exists: the approval gate only works if the approver actually understands what they are
-approving, and a chunked plan with token estimates is written for agents, not for them. The
-explainer is the same plan re-told for someone who will skim it — so it leads with the places
-where a skim most needs to stop.
+Why it exists: the approval gate only works if the approver understands what they approve. A
+chunked plan with token estimates is written for agents, not for them. The explainer is the same
+plan re-told for someone who skims. It opens with the ask, so a misreading is visible at once. It
+**shows** each change instead of describing it. Its header lede points at the parts that need
+them most.
 
-**Who you are writing for.** A strong engineer who does **not know this codebase**. Explain this
-repo's modules, names, layout and conventions — where the touched code lives, what each file is
-for, how a request or piece of data moves through the part you are changing. Do not explain
-general concepts (what a migration is, what an ORM does, how React Query caches); they know.
-Show them **real code** — short, exact excerpts from the worktree with paths and line numbers —
-rather than describing it, because they can read code faster than prose about code, and because
-an excerpt lets them check your reading of it.
+**Write it in Simplified Technical English (ASD-STE100).** This is a hard requirement, not a
+style note:
+
+- One idea per sentence. Keep sentences under 20 words. Break a long sentence into two.
+- Active voice. Present tense. "The page shows the list", not "the list is shown by the page".
+- Use the same word for the same thing every time. Never swap in a synonym for variety.
+- Say what "it" and "this" refer to. Do not make the reader work it out.
+- Use short, common words. "use" not "utilise". "start" not "commence". "about" not "regarding".
+- No long noun strings. "the count on the status chip", not "the status chip count value".
+- Keep code identifiers, paths and quoted copy exact. STE applies to your prose, not to code.
+
+Dashes, hedges and clever asides all cost the reader time. Cut them.
+
+**Who you are writing for.** A strong engineer. They know the stack, the package manager, the
+test runner, the repo layout and the conventions. **Do not explain any of that.** No "repo
+shape" paragraph. No tour of the monorepo. No notes on where tests live or how they run. What
+they do not know is **this specific code** and **what you decided**. Write only that: which
+files change, how data moves through them, the exact defect, and the pattern the implementers
+must copy. Show **real code** — short, exact excerpts with paths and line numbers — so they can
+check your reading of it. Cut anything they can guess.
 
 **Start from the skeleton: copy `{{SKILL_DIR}}/explainer-skeleton.html` to
-`{{STATE_DIR}}/plan-explainer.html` and fill every `FILL` comment.** It fixes the section order
-and the styling so every run reads the same; your job is the content. Keep it self-contained —
-no external scripts, styles, fonts or images, nothing that references a sibling file — because
-it is **published to a public, unlisted, permanent URL** so the human can read it from another
-device while this runs on a remote box. That has one hard consequence: **no secrets in the
-excerpts.** Env values, keys, tokens, connection strings, customer or personal data — if an
-excerpt contains one, cut that line and say `[redacted]`. Code structure is fine; credentials
-never are.
+`{{STATE_DIR}}/plan-explainer.html` and fill every `FILL` comment.** It fixes the section order,
+the styling and the question form, so every run reads the same. Your job is the content. Keep it
+self-contained — no external scripts, styles, fonts or images, and nothing that points at a
+sibling file. The page is **published to a public, unlisted, permanent URL**, so the human can
+read it from another device while this runs on a remote box. That has one hard consequence: **no
+secrets.** Env values, keys, tokens, connection strings, customer or personal data — cut the line
+and write `[redacted]`. Code structure is fine. Credentials never are.
 
-The order is deliberate and you must keep it:
+The order is deliberate. Keep it:
 
-1. **Decisions made on their behalf.** Every ambiguity you resolved, every place the issue was
-   silent and you picked a side — as a question, with what you chose, the realistic alternative,
-   the evidence that tipped it, and what gets built wrongly if you were wrong. Biggest blast
-   radius first. This is the section that earns the page its place: a plan approved without
-   reading is a plan whose silent decisions were never checked. If there were genuinely none,
-   say so in the TL;DR rather than inventing some.
-2. **The ask, restated** in your own words — so a misreading of the issue is visible at the top,
-   not discovered in review.
-3. **How this area works today** — the orientation, with a flow of the touched path, a file
-   table, and real excerpts of the patterns the implementers were told to mirror.
-4. **What changes**, chunk by chunk — before/after sketches or pseudo-diffs, and for each chunk
-   the **observable difference**: what a user, caller or test sees afterwards that it did not before.
-5. **What could break** — behaviour that changes, contracts other code depends on, callers outside
-   the listed files, data implications, and honestly what the automated checks will *not* catch.
-6. **How we'll know it works**, **Deliberately not doing**, and **The plan** as a compact table.
+1. **The ask** — the issue in your own words, so a misreading is visible at the top. Then the
+   **acceptance criteria, word for word**, as a checklist. Flag every line that changed at the
+   criteria check (corrected / added). If a criterion states something false about the code,
+   keep the words and flag the correction beside it.
+2. **How this code works today** — the flow of the touched path, the file table, and real
+   excerpts of the defect and of the pattern to copy. No general repo orientation. For UI work,
+   a mock of the current screen beats a paragraph about it.
+3. **What changes**, chunk by chunk — **shown, not described**. This is the heart of the page.
+   See "Show the change" below. End each chunk with the **observable difference**: what a user,
+   caller or test sees afterwards that it did not see before.
+4. **What could break** — behaviour that changes, contracts other code depends on, callers
+   outside the listed files, data effects, and what the checks will *not* catch.
+5. **How we know it works**, **Deliberately not doing**, and **The plan** as a compact table.
+6. **Endnotes: decisions made for them.** Every ambiguity you resolved. Every place the issue was
+   silent and you picked a side. Every place the code and a spec disagree. One numbered entry
+   each, biggest blast radius first: what you chose, the real alternative, the evidence that
+   settled it, and what gets built wrongly if you were wrong. The badges and caveats in the mocks
+   point here. If there were none, say so. Do not invent some.
 
-Every section opens with a one-line TL;DR, so a reader who stops after the first line of each
-still leaves with the gist. Keep each section short enough to actually be read: this is a
-briefing, not documentation. Prefer one real excerpt to three paragraphs about it.
+**Show the change.** The human decides from pictures, not prose. The "what changes" section is
+where the page earns its place:
+
+- **UI chunks get static mocks built from the app's real design system.** Copy the app's design
+  tokens word for word from their real source (globals.css / tokens.css / tailwind theme) into
+  the skeleton's APP TOKENS block, light and dark. Write the mock CSS from the real component
+  sources. Lift every colour, size, weight and spacing value from a named file, and cite that
+  file in a comment beside the rule. The theme toggle then shows the mock in both themes. If the
+  mock looks wrong, the app looks wrong — reproduce it faithfully. Do not hand-tune. Use
+  realistic content, at the target viewport width.
+- **Mock the alternatives side by side.** Badge the chosen one `planned`. Badge the others
+  `declined` or `alternative`. Give each a one-line trade-off. A rejected option the human can
+  *see* is a decision they can check.
+- **Label everything you invented.** Anything in a mock that the issue, the code and the design
+  docs do not set gets an `Invented:` caveat under the element. Every place the code and a
+  written spec disagree gets a `Spec disagreement:` caveat that names the side the mock follows.
+  Never let an invention read as real.
+- **Non-UI chunks get before/after code, pseudo-diffs, or a flow of the new path** — with exact
+  file and function names, in the skeleton's `.cols`, `.del`/`.add` and `.flow` idioms.
+
+**Ask when the human must choose. Do not assume.** The skeleton has a question form for this:
+
+- Put the choice in a `.q` block, next to the thing it is about. A UI question sits under the
+  mocks that show the options. The mocks **are** the options.
+- Fill `data-question` on the block and `data-answer` on each radio. Write both as full,
+  standalone sentences. They go into the copied text, away from the page.
+- Use the free-text box alone when the answer is not a choice — copy wording, a threshold, a name.
+- Give every question a unique radio `name`.
+- The sticky button copies every question and answer as plain text. The human pastes it back in
+  chat. Say this in the header lede when the page has questions.
+- **Ask only about a real fork you cannot settle.** Two or three questions at most. A decision
+  you can defend with evidence from the code belongs in the endnotes, not in the form. A page
+  full of questions moves your work onto the reader.
+
+Keep each section short enough to read. This is a briefing, not documentation. One mock or one
+real excerpt beats three paragraphs about it.
