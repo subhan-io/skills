@@ -41,7 +41,7 @@ fi
 $DRY || mkdir -p "$DEST"
 linked=0; skipped=0
 
-for skill_md in "$REPO"/skills/*/SKILL.md; do
+for skill_md in "$REPO"/plugins/*/skills/*/SKILL.md; do
   [ -f "$skill_md" ] || continue
   src="$(dirname "$skill_md")"
   name="$(basename "$src")"

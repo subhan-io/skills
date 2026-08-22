@@ -9,7 +9,7 @@
     {
       "name": "dispatch-agents",
       "source": "./",
-      "skills": ["./skills/dispatch-agents"],
+      "skills": ["./plugins/dispatch-agents/skills/dispatch-agents"],
       "strict": false,
       "description": "Run one dispatcher tick over a repo's agent pipeline: shepherd agent PRs through checks, codex review and adversarial review, rebase after merges, and dispatch ready issues to background implementers in isolated worktrees.",
       "author": { "name": "Subhan Mahmood" },
@@ -18,7 +18,7 @@
     {
       "name": "ship-issue",
       "source": "./",
-      "skills": ["./skills/ship-issue"],
+      "skills": ["./plugins/ship-issue/skills/ship-issue"],
       "strict": false,
       "description": "Take one named GitHub issue end to end in a fresh worktree: plan with opus, stop for approval, implement with sonnet, open a PR, run it through Codex review, and resolve findings with opus — leaving a green PR for the human to merge.",
       "author": { "name": "Subhan Mahmood" },
@@ -27,7 +27,7 @@
     {
       "name": "pr-media-upload",
       "source": "./",
-      "skills": ["./skills/pr-media-upload"],
+      "skills": ["./plugins/pr-media-upload/skills/pr-media-upload"],
       "strict": false,
       "description": "Upload a screenshot, GIF or screen recording to a public S3 bucket and get a permanent URL to embed in a GitHub PR description, issue or comment.",
       "author": { "name": "Subhan Mahmood" },

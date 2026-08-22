@@ -1,0 +1,25 @@
+{
+  "name": "pr-media-upload",
+  "version": "1.0.0",
+  "description": "Upload screenshots and recordings to a permanent public URL for GitHub pull requests.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["github", "screenshots", "s3", "pull-requests"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "PR Media Upload",
+    "shortDescription": "Host media for GitHub pull requests.",
+    "longDescription": "Upload a screenshot, GIF, video, or HTML demo to a public S3 bucket and return a permanent URL ready for GitHub Markdown.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["Upload", "GitHub", "Media"],
+    "websiteURL": "https://github.com/subhan-io/skills",
+    "defaultPrompt": [
+      "Upload this screenshot and give me Markdown for the PR.",
+      "Attach this demo video to the pull request description."
+    ]
+  }
+}

@@ -116,7 +116,7 @@ if [ -z "$UPLOAD" ]; then
   # Only search roots that exist, and swallow the status: under `set -o pipefail` a find that
   # errors on a missing directory takes the whole script down with it.
   _roots=()
-  for _r in "$HOME/.claude/plugins" "$HOME/.claude/skills"; do
+  for _r in "$HOME/.codex/plugins" "$HOME/.claude/plugins" "$HOME/.claude/skills"; do
     [ -d "$_r" ] && _roots+=("$_r")
   done
   if [ ${#_roots[@]} -gt 0 ]; then

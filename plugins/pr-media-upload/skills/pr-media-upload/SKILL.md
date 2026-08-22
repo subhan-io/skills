@@ -22,9 +22,10 @@ was loaded from. On the symlink install that's:
 upload=~/.claude/skills/pr-media-upload/upload.sh
 ```
 
-On the plugin install path it's `"$CLAUDE_PLUGIN_ROOT"/skills/pr-media-upload/upload.sh`.
-If neither exists, use the directory this file was loaded from. Set `$upload` once and
-reuse it; the examples below assume it.
+On Claude's plugin path it's `"$CLAUDE_PLUGIN_ROOT"/skills/pr-media-upload/upload.sh`.
+Codex installs it below `~/.codex/plugins/cache/<marketplace>/pr-media-upload/`.
+In every host, the reliable option is the directory this file was loaded from. Set `$upload`
+once and reuse it; the examples below assume it.
 
 The script itself is cwd-independent — run it from any repo, with a relative or
 absolute file path.

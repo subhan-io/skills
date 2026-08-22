@@ -1,141 +1,82 @@
 # skills
 
-Personal agent skills, kept in one repo so every machine runs the same version.
+Personal agent workflows packaged as native Codex plugins, with compatibility for Claude Code.
 
+```text
+plugins/<name>/.codex-plugin/plugin.json  # Codex plugin manifest
+plugins/<name>/skills/<name>/SKILL.md     # skill and its bundled resources
+.agents/plugins/marketplace.json          # Codex marketplace catalog
+.claude-plugin/marketplace.json           # Claude Code marketplace catalog
+install.sh                                # optional Claude skill symlinks
 ```
-skills/<name>/SKILL.md    # one directory per skill — that's the whole convention
-install.sh                # symlinks them into ~/.claude/skills
-.claude-plugin/           # marketplace manifest, for the plugin install path
-```
 
-## Install
+## Install in Codex
 
-Two paths. They're independent — pick one per machine.
-
-**Symlink (recommended for machines where you also edit the skills).** Skills stay linked to the working tree, so `git pull` updates them everywhere with no reinstall:
+Add this repository as a marketplace, then install whichever plugins you want:
 
 ```sh
-git clone git@github.com:subhan-io/skills.git ~/Documents/code/subhan-skills
-cd ~/Documents/code/subhan-skills && ./install.sh
+codex plugin marketplace add subhan-io/skills
+codex plugin add dispatch-agents@subhan-skills
+codex plugin add ship-issue@subhan-skills
+codex plugin add pr-media-upload@subhan-skills
 ```
 
-`./install.sh -n` shows what it would do. `./install.sh dispatch-agents` links just one. A real
-directory already sitting at `~/.claude/skills/<name>` is never clobbered without `-f`.
+Use `codex plugin marketplace upgrade subhan-skills` to refresh the repository snapshot, and
+`codex plugin list` to inspect available or installed plugins.
 
-**Plugin marketplace (recommended for machines that only consume).** Claude Code copies the skills
-into its plugin cache and manages updates:
+For local development, point Codex at the checkout instead:
 
+```sh
+codex plugin marketplace add "$PWD"
 ```
+
+## Install in Claude Code
+
+The existing Claude marketplace remains supported:
+
+```text
 /plugin marketplace add subhan-io/skills
 /plugin install dispatch-agents@subhan-skills
 /reload-plugins
 ```
 
-Update later with `/plugin marketplace update subhan-skills`. Note that plugin skills are namespaced
-by plugin (`/dispatch-agents:dispatch-agents`), whereas symlinked ones are just `/dispatch-agents`.
+Update later with `/plugin marketplace update subhan-skills`.
 
-## Adding a skill
+On machines where you edit this repo, `./install.sh` can instead symlink every skill into
+`~/.claude/skills`. `./install.sh -n` previews the changes, and `./install.sh dispatch-agents`
+links only one skill. A real directory is never replaced unless `-f` is passed.
 
-1. `mkdir skills/<name>` and write `SKILL.md` with `name:` + `description:` frontmatter.
-2. Add an entry to `.claude-plugin/marketplace.json` (`source: "./"`, `skills: ["./skills/<name>"]`,
-   `strict: false`) so the plugin path picks it up too. The symlink path needs no registration.
-3. Push. Other machines: `git pull` (symlink) or `/plugin marketplace update` (plugin).
+## Adding a plugin
 
-## Skills
+1. Create `plugins/<name>/skills/<name>/SKILL.md` and its bundled resources.
+2. Add `plugins/<name>/.codex-plugin/plugin.json`; the folder and manifest names must match.
+3. Add the plugin to `.agents/plugins/marketplace.json` and the compatibility entry to
+   `.claude-plugin/marketplace.json`.
+4. Validate the plugin and skill before pushing.
+
+## Plugins
 
 ### dispatch-agents
 
-Runs one orchestrator tick over a repo's agent pipeline: shepherds open agent PRs through checks →
-codex review → adversarial review, fans out rebase agents after merges, and dispatches unblocked
-`ready-for-agent` issues to background implementers in isolated worktrees. GitHub labels, branches
-and comments are the only state store, so a tick is resumable from a cold session.
+Runs one orchestrator tick over a repository's agent pipeline: shepherds open agent PRs through
+checks and reviews, fans out rebase agents after merges, and dispatches unblocked
+`ready-for-agent` issues to isolated implementers. GitHub labels, branches, and comments are the
+state store, so a tick is resumable from a cold session.
 
-Requires `gh` (authenticated), `jq`, `git`, `python3`, and a repo whose PRs are reviewed by the
-[Codex GitHub app](https://chatgpt.com/codex) — the skill triggers reviews by commenting
-`@codex review` and waits for them to settle.
-
-**Per-repo config is mandatory outside subhanio-platform.** The built-in defaults name that repo's
-labels and app. Drop a `.claude/dispatch-agents.env` in the target repo:
-
-```sh
-APP_LABEL=my-app                      # label identifying the app's issues
-PREVIEW_LABEL=deploy-preview:my-app
-BASE_BRANCH=main                      # default: master
-TRACKING_ISSUE=42                     # the contracts/bulletin issue
-# READY_LABEL, CLAIM_LABEL, REVIEW_LABEL, CONFLICT_LABEL, BRANCH_PREFIX,
-# MAX_ATTEMPTS and the CODEX_* knobs are also overridable — see scripts/common.sh
-```
-
-Values set on the command line beat the file, so `BASE_BRANCH=trunk ./scripts/tick-state.sh` still
-works for a one-off. Kill switch: `touch .claude/dispatch-agents.STOP` in the target repo.
-
-The prompts still assume a pnpm monorepo with `pnpm test` / `typecheck --filter=<app>` /
-`lint --filter=<app>`; adapting them to a different toolchain means editing
-`implementer-prompt.md` and `reviewer-prompt.md`, not just the env file.
+Requires authenticated `gh`, `jq`, `git`, and `python3`. Repositories outside the original
+platform setup need a `.claude/dispatch-agents.env`; see the skill itself for the complete config.
 
 ### ship-issue
 
-Takes **one** named issue end to end and stops with a PR ready for you to merge:
-fresh worktree off the current default-branch tip → opus planner (chunked to ~200k tokens per
-session) → **approval gate** → one sonnet implementer per chunk, run in order → PR → codex review
-→ opus resolver, max two resolve rounds. `/ship-issue https://github.com/owner/repo/issues/12`,
-or just `12`.
+Takes one named issue from an isolated worktree to a merge-ready pull request. It plans the work,
+stops for human approval, implements sequential chunks, requests Codex review, and resolves the
+findings. It never merges the PR.
 
-The approval gate comes with a **plan explainer**: alongside the markdown plan the agents get, the
-planner writes a self-contained `plan-explainer.html` into the run's state directory and the
-orchestrator publishes it through `pr-media-upload` and hands you the URL — so it reads fine from
-your phone while the skill runs on a VPS. (Public-but-unlisted, like the screenshots; the planner
-is told to keep secrets out of its excerpts.) It is written for a strong engineer who doesn't know the codebase
-in question, and it leads with the decisions the planner made where the issue was silent — then
-restates the ask, walks the touched code with real excerpts, shows each chunk before/after, and
-names what could break. The markdown plan is for the implementers; the page is for the approver,
-because a gate nobody reads is not a gate. Re-planning regenerates it.
-
-The chunks are real agent boundaries, not headings in a document: each chunk gets a fresh session
-sized to its own context budget, and has to leave the build green before the next starts. The
-continuity between them is a written handoff — each implementer finishes by compacting its session
-into a document aimed at the agent that runs next, and the orchestrator passes that document's
-path straight into the next implementer's prompt. The method ships with the skill as
-`handoff-prompt.md`, adapted from [Matt Pocock's `handoff` skill](https://github.com/mattpocock/skills)
-and deferring to it when it's installed — so the handoff comes out the same whether or not you
-have it, and there is nothing extra to install.
-
-UI chunks ship with screenshots, captured one way only: a **throwaway Playwright script against a
-temporary harness route seeded with mock data**, torn down so none of it reaches the diff, then
-published through `pr-media-upload` and embedded in the PR body. Not `agent-browser`, not the
-browser MCP tools, not a preview deploy — those need real auth and real data, so the shot can't be
-reproduced from the diff by anyone else.
-
-The sibling of `dispatch-agents`, not a replacement: that one sweeps a whole board unattended off
-labels, this one runs a single issue with you in the loop and never writes code before you have
-approved the plan. It never merges.
-
-**No per-repo config.** Default branch, package manager and verification commands are detected;
-whatever detection can't establish comes back as a warning to raise with you rather than a
-silent assumption. Requires `gh` (authenticated), `jq`, `git`, and the
-[Codex GitHub app](https://chatgpt.com/codex) on the repo — setup warns if it sees no sign of it
-rather than letting the review step hang for 15 minutes.
-
-Screenshots additionally need the `pr-media-upload` plugin and its own prerequisites (`infisical`
-and `aws` on `PATH`, with credentials). Setup checks for these too and warns up front, because
-the alternative is an agent finishing a whole capture and only then discovering it has nowhere to
-publish. Without them a repo with no UI work is unaffected; UI work reports its shots
-un-capturable.
-
-Worktrees land in `.claude/worktrees/ship-issue-<n>` on `ship/issue-<n>` — deliberately not
-`agent/issue-<n>`, so `dispatch-agents` in the same repo doesn't adopt the branch as its own.
+Requires authenticated `gh`, `jq`, and `git`. UI screenshots additionally use the
+`pr-media-upload` plugin and its prerequisites.
 
 ### pr-media-upload
 
-Uploads a screenshot, GIF or screen recording to a public S3 bucket and prints a permanent URL, so
-an agent can embed media in a GitHub PR description. Agents can't use GitHub's drag-drop attachment
-uploader — that needs a browser session, not a token — so hosting the file and embedding the URL is
-the only route. `upload.sh <file>` writes just the URL to stdout, so `url=$(upload.sh shot.png)`
-is safe.
-
-Requires `infisical` (logged in) and the `aws` CLI. Credentials for the write-only uploader IAM
-user come from Infisical, passed with an explicit `--projectId`/`--path`, so the skill works from
-any repo regardless of that repo's own `.infisical.json`. No per-repo config.
-
-Uploads are **public and permanent** — no expiry, and the scoped creds can't delete. Never upload
-anything secret or personal.
+Uploads a screenshot, GIF, video, or HTML demo to a public S3 bucket and prints a permanent URL
+for a GitHub PR, issue, or comment. Requires logged-in `infisical` and the AWS CLI. Uploads are
+public and permanent; never upload secret or personal material.

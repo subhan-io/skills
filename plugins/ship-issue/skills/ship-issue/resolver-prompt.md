@@ -64,7 +64,7 @@ Hard rules:
   ephemeral port, torn down completely so none of it lands in the diff. Stop that server by the
   PID you recorded, never `pkill -f <port>` — the pattern matches your own shell and kills your
   session. Publish with the `pr-media-upload` skill; search for it rather than assuming a depth:
-  `find "$HOME/.claude/plugins" "$HOME/.claude/skills" -path '*pr-media-upload/upload.sh' -type f -perm -u+x 2>/dev/null | head -1`.
+  `find "$HOME/.codex/plugins" "$HOME/.claude/plugins" "$HOME/.claude/skills" -path '*pr-media-upload/upload.sh' -type f -perm -u+x 2>/dev/null | head -1`.
   **Never `agent-browser`, the browser MCP tools, the in-app browser pane, or a preview deploy** —
   those need real auth and real data and cannot be reproduced from the diff.
 - **Updating the PR body: check the exit code.** `gh pr edit` fails outright against hosts where

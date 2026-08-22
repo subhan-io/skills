@@ -1,0 +1,25 @@
+{
+  "name": "ship-issue",
+  "version": "1.0.0",
+  "description": "Take one GitHub issue through planning, approval, implementation, review, and a merge-ready pull request.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["github", "issues", "code-review", "agents", "worktree"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Ship Issue",
+    "shortDescription": "Turn one GitHub issue into a merge-ready PR.",
+    "longDescription": "Plan one issue with a human approval gate, implement it in isolated chunks, open a pull request, and resolve Codex review findings.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["GitHub", "Implementation", "Code Review"],
+    "websiteURL": "https://github.com/subhan-io/skills",
+    "defaultPrompt": [
+      "Ship issue 12 end to end and stop for plan approval.",
+      "Take this GitHub issue to a merge-ready pull request."
+    ]
+  }
+}
