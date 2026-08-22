@@ -1,6 +1,6 @@
 ---
 name: ship-issue
-description: Take ONE named GitHub issue end to end in a fresh worktree — plan it with an opus subagent that also writes a visual HTML explainer of the plan, stop for the human's approval, implement it one sonnet subagent per plan chunk, open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving a green PR for the human to merge. Use when the user points at a specific issue and wants it carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement <issue URL>", "get this ready for me to merge". For the unattended multi-issue pipeline that sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is single-issue, interactive, and always stops for plan approval.
+description: Take ONE named GitHub issue end to end in a fresh worktree — confirm the issue's acceptance criteria with the human, plan it with an opus subagent that also writes a visual HTML explainer of the plan, stop for the human's approval, implement it one sonnet subagent per plan chunk, open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving a green PR for the human to merge. Use when the user points at a specific issue and wants it carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement <issue URL>", "get this ready for me to merge". For the unattended multi-issue pipeline that sweeps every ready-for-agent issue on a board, use dispatch-agents instead — this skill is single-issue, interactive, and always stops for plan approval.
 ---
 
 # Ship one issue, end to end
@@ -100,20 +100,39 @@ publish step wastes a whole capture. Raise it before planning. The human either 
 prerequisites, or accepts reading the explainer off the box themselves and UI chunks reporting
 their shots un-capturable.
 
-### 2. Plan — opus subagent
+### 2. Confirm the criteria, then plan — opus subagent
 
-Spawn a background Agent with `model: "opus"`, given `planner-prompt.md` with every `{{...}}`
+**Before spawning the planner, confirm the ask with the user.** Planning is the expensive step,
+and a plan built on criteria the human never meant is the expensive step wasted. From the issue
+body (already in the setup blob), extract the ask in one sentence and the acceptance criteria
+**verbatim** — plus `issueStatedCommands`, since those are usually criteria too — and put them to
+the user: are these the right criteria, and are any missing or wrong? If the issue names no
+criteria, propose the list you would plan against and ask the same question. This is a cheap
+text exchange, not an artifact — do not read the codebase for it, and do not let it grow into
+pre-planning. If the user already confirmed the criteria in this conversation (or told you to
+skip the check), don't re-ask.
+
+Then spawn a background Agent with `model: "opus"`, given `planner-prompt.md` with every `{{...}}`
 filled from the setup blob — including `{{STATE_DIR}}` and `{{SKILL_DIR}}`, this skill's own
-absolute directory, since the planner reads `explainer-skeleton.html` out of it. It reads the
-code and produces **two things from one understanding**:
+absolute directory, since the planner reads `explainer-skeleton.html` out of it, and
+`{{CRITERIA_NOTES}}`: the outcome of the criteria check, as corrections/additions per criterion,
+or "confirmed as written" if the user waved it through. It reads the code and produces **two
+things from one understanding**:
 
 - the **chunked plan**, returned as its final text — each chunk sized to fit one Claude Code
   session (~200k tokens) and independently verifiable. This is what the implementers get.
 - the **explainer**, `<stateDir>/plan-explainer.html` — the same plan re-told for the human who
-  has to approve it: a self-contained page that leads with the decisions the planner made where
-  the issue was silent, then restates the ask, orients the reader in the touched code with real
-  excerpts, shows each chunk as before/after, and names what could break. It is written for a
-  strong engineer who does not know this codebase, and it is the thing the user actually reads.
+  has to approve it: a self-contained page that opens with the ask and the confirmed acceptance
+  criteria, shows the touched code with real excerpts, then **shows** each chunk — for UI work as
+  static mocks built from the app's real design tokens, light and dark, with declined
+  alternatives beside the planned one; otherwise as before/after code — and names what could
+  break, with every decision consolidated in its endnotes. It is written in Simplified Technical
+  English for a strong engineer who **knows the stack and the repo layout**: no repo tour, no
+  toolchain explanation, only this code and these decisions. It is the thing the user reads.
+
+  Where the plan genuinely cannot settle a fork, the page asks instead of assuming: the planner
+  puts it in a question block beside the mocks that show the options, and a sticky **Copy Q&A**
+  button copies every question and answer as plain text for the user to paste back in chat.
 
 **Check the explainer exists and is filled before presenting anything** — a file that is missing,
 still the bare skeleton, or a plan returned with no path is an incomplete planning step, not a
@@ -136,10 +155,18 @@ is told to keep secrets out of its excerpts, and why you say "unlisted, permanen
 it over rather than letting the user assume it is private.
 
 Then present the plan's summary, the decisions it asks them to confirm, and the chunk list; the
-full chunk text is there if they want it but the page is the review surface. Then **wait**. Do not spawn the implementer,
-do not create branches, do not write code. This is the whole point of the skill's interactive
-shape: the cheapest place to catch a wrong approach is before anything is built — and the gate is
-only as good as the reading it gets, which is what the explainer is for.
+full chunk text is there if they want it but the page is the review surface. **If the explainer
+carries open questions**, say so and say how to answer: the page's sticky **Copy Q&A** button
+copies every question with the chosen answer, and they paste that back here. Do not re-ask those
+questions as chat prose — the whole point of putting them on the page is that the options are the
+mocks. Then **wait**. Do not spawn the implementer, do not create branches, do not write code.
+This is the whole point of the skill's interactive shape: the cheapest place to catch a wrong
+approach is before anything is built — and the gate is only as good as the reading it gets, which
+is what the explainer is for.
+
+A pasted-back Q&A block is an **answer, not an approval.** Fold the answers into the plan and say
+what changed. If an answer contradicts a chunk, re-spawn the planner with it. Then ask for the
+green light.
 
 **On approval, write the plan to `<stateDir>/plan.md` before spawning anything**, along with any
 decisions the human made at the gate — those are part of the plan now, and a chunk agent that
