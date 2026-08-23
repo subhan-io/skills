@@ -87,8 +87,8 @@ understanding, so the two never disagree — and name its absolute path in your 
 Why it exists: the approval gate only works if the approver understands what they approve. A
 chunked plan with token estimates is written for agents, not for them. The explainer is the same
 plan re-told for someone who skims. It opens with the ask, so a misreading is visible at once. It
-**shows** each change instead of describing it. Its header lede points at the parts that need
-them most.
+**shows** each change instead of describing it. Its opening paragraph points at the parts that
+need them most.
 
 **Write it in Simplified Technical English (ASD-STE100).** This is a hard requirement, not a
 style note:
@@ -170,7 +170,7 @@ where the page earns its place:
 - Use the free-text box alone when the answer is not a choice — copy wording, a threshold, a name.
 - Give every question a unique radio `name`.
 - The sticky button copies every question and answer as plain text. The human pastes it back in
-  chat. Say this in the header lede when the page has questions.
+  chat. Say this in the opening paragraph when the page has questions.
 - **Ask only about a real fork you cannot settle.** Two or three questions at most. A decision
   you can defend with evidence from the code belongs in the endnotes, not in the form. A page
   full of questions moves your work onto the reader.
