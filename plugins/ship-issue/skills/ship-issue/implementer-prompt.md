@@ -125,9 +125,11 @@ see.
      mid-chunk. `kill "$devpid"` is the whole fix.
 4. **Capture with an uncommitted throwaway script** — import `chromium` from the app's own
    Playwright dev dependency and drive it headless. Shoot desktop (1440×900) and, when the change
-   is layout-sensitive, mobile (390×844). This is *not* the same as running the repo's e2e or
-   functional suites: those often need a shared database and fixed ports and may be off-limits to
-   agents; your own script on your own port with your own fixtures is safe regardless.
+   is layout-sensitive, mobile (402×874 — iPhone 17 Pro; use that explicit viewport rather than
+   Playwright's `devices["iPhone 17 Pro"]` entry, whose height subtracts Safari's chrome). This is
+   *not* the same as running the repo's e2e or functional suites: those often need a shared
+   database and fixed ports and may be off-limits to agents; your own script on your own port with
+   your own fixtures is safe regardless.
    - If a shot comes back blank or mid-skeleton, **wait on a real selector**, never a sleep.
    - Never retry a failed browser launch in a loop. If Chromium is missing, install it once, then
      report the failure if it still won't start.
