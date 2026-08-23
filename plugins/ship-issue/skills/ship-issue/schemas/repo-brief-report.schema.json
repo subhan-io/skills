@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "relevantFiles", "existingPatterns", "tests", "instructions", "risks", "openQuestions", "notes"],
+  "properties": {
+    "status": { "type": "string", "enum": ["ready", "blocked"] },
+    "summary": { "type": "string" },
+    "relevantFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "purpose", "symbols", "evidence"],
+        "properties": {
+          "path": { "type": "string" },
+          "purpose": { "type": "string" },
+          "symbols": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "existingPatterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "paths", "notes"],
+        "properties": {
+          "name": { "type": "string" },
+          "paths": { "type": "array", "items": { "type": "string" } },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "command", "coverage"],
+        "properties": {
+          "path": { "type": "string" },
+          "command": { "type": ["string", "null"] },
+          "coverage": { "type": "string" }
+        }
+      }
+    },
+    "instructions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "appliesTo", "requirements"],
+        "properties": {
+          "path": { "type": "string" },
+          "appliesTo": { "type": "string" },
+          "requirements": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "openQuestions": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  }
+}

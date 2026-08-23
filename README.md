@@ -68,12 +68,13 @@ platform setup need a `.claude/dispatch-agents.env`; see the skill itself for th
 
 ### ship-issue
 
-Takes one named issue from an isolated worktree to a merge-ready pull request. It plans the work,
-stops for human approval, implements sequential chunks, requests Codex review, and resolves the
-findings. It never merges the PR.
+Takes one named issue from an isolated worktree to a merge-ready pull request. It builds a Codex
+repository brief, plans with Claude Opus, stops for human approval, alternates sequential chunks
+between Codex and Claude Sonnet, requests Codex review, and resolves the findings. It never merges
+the PR.
 
-Requires authenticated `gh`, `jq`, and `git`. UI screenshots additionally use the
-`pr-media-upload` plugin and its prerequisites.
+Requires authenticated `gh`, `claude`, and `codex`, plus `jq`, `git`, `python3`, and GNU
+`timeout`. UI screenshots additionally use the `pr-media-upload` plugin and its prerequisites.
 
 ### pr-media-upload
 
