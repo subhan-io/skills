@@ -196,12 +196,9 @@ session opens the PR instead; say so, and write for that reader.
 
 ## Report back
 
-Short — the detail lives in the handoff document, and the orchestrator reads that. It needs:
-
-- **Status** — green and pushed, or stopped early.
-- **Handoff document** — its absolute path.
-- **Done** — two or three lines on what landed.
-- **Anything that changes the rest of the plan** — a chunk that can no longer work as written, a
-  dependency the plan missed. Say it here too; this is what decides whether the run continues.
-- **Screenshots** — the published URLs, or the `un-capturable:` reason.
-- **Verification** — the commands and their actual results.
+Return only the structured implementer report requested by the output schema. Always write the
+handoff and return its absolute path, including when you stop early; that document is how the
+orchestrator determines whether the worktree is safe. Use `green`, `stopped`, or `plan-wrong` as
+the status. Include every verification command with its actual cwd, exit code, and concise result;
+every pushed SHA; screenshots with captions; an `uncapturable` reason or `null`; out-of-scope
+discoveries; and concise notes about anything that changes the remaining plan.

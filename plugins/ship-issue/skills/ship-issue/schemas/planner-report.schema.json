@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "chunks", "risks", "ambiguities", "outOfScope", "explainerPath", "notes"],
+  "properties": {
+    "status": { "type": "string", "enum": ["ready", "blocked"] },
+    "summary": { "type": "string" },
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "title", "touchesUI", "files", "dependsOn", "implementation", "verification", "contextEstimate"],
+        "properties": {
+          "index": { "type": "integer" },
+          "title": { "type": "string" },
+          "touchesUI": { "type": "boolean" },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "dependsOn": { "type": "array", "items": { "type": "integer" } },
+          "implementation": { "type": "string" },
+          "verification": { "type": "array", "items": { "type": "string" } },
+          "contextEstimate": { "type": "string" }
+        }
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "ambiguities": { "type": "array", "items": { "type": "string" } },
+    "outOfScope": { "type": "array", "items": { "type": "string" } },
+    "explainerPath": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}

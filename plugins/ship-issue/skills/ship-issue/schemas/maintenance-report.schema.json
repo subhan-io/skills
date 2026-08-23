@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "role", "summary", "verification", "commitsPushed", "screenshots", "uncapturable", "notes"],
+  "properties": {
+    "status": { "type": "string", "enum": ["green", "stopped", "escalate"] },
+    "role": { "type": "string", "enum": ["fixer", "rebaser"] },
+    "summary": { "type": "string" },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "cwd", "exitCode", "summary"],
+        "properties": {
+          "command": { "type": "string" },
+          "cwd": { "type": "string" },
+          "exitCode": { "type": "integer" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "commitsPushed": { "type": "array", "items": { "type": "string" } },
+    "screenshots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "caption"],
+        "properties": {
+          "url": { "type": "string" },
+          "caption": { "type": "string" }
+        }
+      }
+    },
+    "uncapturable": { "type": ["string", "null"] },
+    "notes": { "type": "string" }
+  }
+}

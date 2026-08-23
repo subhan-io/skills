@@ -4,7 +4,7 @@
 #
 #   setup.sh <issue-url-or-number> [--dry-run]
 #
-# Emits a JSON blob: issue, repo, baseBranch, branch, worktree, detected commands, warnings.
+# Emits a JSON blob: issue, repo, baseBranch, branch, worktree, state paths, commands, warnings.
 # Repo-agnostic by detection, not by configuration — there is no env file to write first.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
@@ -27,6 +27,11 @@ BRANCH="ship/issue-$ISSUE"
 WT="$ROOT/.claude/worktrees/ship-issue-$ISSUE"
 STATE="$ROOT/.claude/worktrees/ship-issue-$ISSUE.state"
 WARN=()
+
+for _agent_bin in claude codex python3 timeout realpath; do
+  command -v "$_agent_bin" >/dev/null 2>&1 \
+    || WARN+=("$_agent_bin not found on PATH — the two-engine runner cannot complete every role")
+done
 
 # The issue must exist and be open — planning a closed issue is almost always a stale link.
 issue_json=$(gh issue view "$ISSUE" --json number,title,body,state,labels,url) \
@@ -252,6 +257,7 @@ jq -n --argjson issue "$issue_json" --arg slug "$SLUG" --arg base "$BASE" \
       --arg branch "$BRANCH" --arg wt "$WT" --arg state "$STATE" --argjson cmds "$CMDS" \
       --arg upload "$UPLOAD" --argjson stated "$STATED" --argjson dry "$DRY" --args '
   {repo:$slug, baseBranch:$base, branch:$branch, worktree:$wt, stateDir:$state, dryRun:$dry,
+   engineLedger:($state + "/engine-ledger.json"),
    issue:{number:$issue.number, title:$issue.title, url:$issue.url,
           state:$issue.state, labels:($issue.labels|map(.name))},
    commands:$cmds, issueStatedCommands:$stated,

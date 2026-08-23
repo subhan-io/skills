@@ -1,6 +1,6 @@
 {
   "name": "ship-issue",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Take one GitHub issue through planning, approval, implementation, review, and a merge-ready pull request.",
   "author": {
     "name": "Subhan Mahmood",
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Ship Issue",
     "shortDescription": "Turn one GitHub issue into a merge-ready PR.",
-    "longDescription": "Plan one issue with a human approval gate, implement it in isolated chunks, open a pull request, and resolve Codex review findings.",
+    "longDescription": "Plan one issue with a human approval gate, route isolated implementation chunks across Claude and Codex, open a pull request, and resolve Codex review findings.",
     "developerName": "Subhan Mahmood",
     "category": "Developer Tools",
     "capabilities": ["GitHub", "Implementation", "Code Review"],

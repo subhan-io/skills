@@ -2,9 +2,9 @@
 name: ship-issue
 description: >-
   Take ONE named GitHub issue end to end in a fresh worktree — confirm the issue's acceptance
-  criteria with the human, plan it with an opus subagent that also writes a visual HTML explainer
-  of the plan, stop for the human's approval, implement it one sonnet subagent per plan chunk,
-  open a PR, run it through Codex review, and resolve the findings with an opus subagent — leaving
+  criteria with the human, build a Codex repository brief, plan it with Claude Opus and a visual
+  HTML explainer, stop for the human's approval, alternate implementation chunks between Codex
+  and Claude Sonnet, open a PR, run Codex review, and resolve findings with Claude Opus — leaving
   a green PR for the human to merge. Use when the user points at a specific issue and wants it
   carried to a mergeable PR: "take issue 12 end to end", "ship this issue", "plan and implement
   this issue URL", "get this ready for me to merge". For the unattended multi-issue pipeline that
@@ -35,19 +35,56 @@ A URL naming a different repo than the cwd is a hard error, not a silent retarge
 | Script | Does |
 |---|---|
 | `scripts/setup.sh <issue> [--dry-run]` | resolves the issue, detects base branch + commands, creates the worktree off the **current** tip of the default branch, returns one JSON blob with `warnings` |
+| `scripts/run-agent.sh ...` | selects Claude or Codex, applies its sandbox, validates the structured report, records usage, and prints one small run record |
+| `scripts/engine-policy.sh` | static role routing: Codex brief/fix/rebase, Claude plan/resolve, alternating chunks |
 | `scripts/pr-status.sh <pr>` | the between-steps snapshot: `classification` (conflict/pending/red/green), `behindBase`, `needsRebase`, codex state |
 | `scripts/codex-wait.sh status\|request\|watch\|findings <pr>` | drives the Codex review; `watch` blocks until settled — **always background it** |
 
-Alongside the scripts, the prompts: `planner-prompt.md`, `implementer-prompt.md`,
-`handoff-prompt.md`, `resolver-prompt.md` — and `explainer-skeleton.html`, the HTML shell the
-planner fills to produce the human-facing plan explainer at the approval gate.
+Alongside the scripts are role prompts, schemas under `schemas/`, and
+`explainer-skeleton.html`, the HTML shell the planner fills at the approval gate.
 
-**Models:** planner `opus`, chunk implementers `sonnet`, resolver `opus`, rebase/fix `sonnet`.
-Pass via the Agent tool's `model` param at spawn.
+**Routing is policy, not a model decision.** `engine-policy.sh` chooses the default engine and
+Claude model. Never reproduce the map in an ad-hoc invocation or choose an engine from task vibes:
 
-**Agent count is not fixed.** The planner decides it: one implementer agent per chunk it returns,
-plus whatever rebase/fix agents the sync check calls for. A five-chunk plan is five implementers,
+| Role | Default |
+|---|---|
+| repository brief | Codex, read-only, network off |
+| planner | Claude Opus |
+| implementer chunk 1, 3, 5… | Codex, workspace-write, network on |
+| implementer chunk 2, 4, 6… | Claude Sonnet |
+| fixer / rebaser | Codex, workspace-write, network on |
+| resolver | Claude Opus |
+
+An explicit `--engine` or `SHIP_ISSUE_ENGINE` override exists for the human, not for the
+orchestrator to improvise with. Codex uses the installed CLI's default model. UI chunks follow the
+same alternation: Codex runs on the same machine and has the same Playwright and upload tooling.
+
+**Agent count is not fixed.** The planner decides it: one subprocess per chunk it returns, plus
+whatever rebase/fix subprocesses the sync check calls for. A five-chunk plan is five implementers,
 sequentially.
+
+### Subprocess contract
+
+Every routed role is invoked through `scripts/run-agent.sh`, using a filled prompt file and the
+matching schema. Start it with the host shell tool's background/long-running-process support so a
+30-minute agent does not block the orchestrator process. The runner writes raw output to a log,
+writes the full role report to `--out`, appends `<stateDir>/engine-ledger.json`, and prints one
+small JSON run record.
+
+The gate is mechanical:
+
+- `reportValid` must be `true` before the report file is read.
+- Exit `65` / `status:"invalid-report"` means the model returned the wrong shape. Stop.
+- Exit `124` / `status:"timed-out"` means the whole engine call timed out. Stop.
+- A non-zero engine failure is a stop, except a Claude rate limit on implementer/fixer/rebaser,
+  which the runner retries once on Codex and records in `failover`.
+- A valid report can still say `blocked`, `stopped`, `plan-wrong`, or `escalate`; do not advance
+  merely because its JSON is valid.
+
+`run-agent.sh` gives every Codex writer `workspace-write`, network access, and `--add-dir` for the
+state directory. Before either engine starts, it temporarily creates each missing colocated
+`AGENTS.md -> CLAUDE.md` or `CLAUDE.md -> AGENTS.md` compatibility link. If both exist it skips
+the directory. The links are hidden from child Git commands and removed after the call.
 
 **Codex is not a GitHub check.** Nothing in `gh pr checks` reflects it. You post `@codex review`,
 the review lands minutes later, and the only completion signal is that the bot has gone quiet for
@@ -109,9 +146,9 @@ publish step wastes a whole capture. Raise it before planning. The human either 
 prerequisites, or accepts reading the explainer off the box themselves and UI chunks reporting
 their shots un-capturable.
 
-### 2. Confirm the criteria, then plan — opus subagent
+### 2. Confirm the criteria, build the brief, then plan
 
-**Before spawning the planner, confirm the ask with the user.** Planning is the expensive step,
+**Before running the brief or planner, confirm the ask with the user.** Planning is the expensive step,
 and a plan built on criteria the human never meant is the expensive step wasted. From the issue
 body (already in the setup blob), extract the ask in one sentence and the acceptance criteria
 **verbatim** — plus `issueStatedCommands`, since those are usually criteria too — and put them to
@@ -121,15 +158,30 @@ text exchange, not an artifact — do not read the codebase for it, and do not l
 pre-planning. If the user already confirmed the criteria in this conversation (or told you to
 skip the check), don't re-ask.
 
-Then spawn a background Agent with `model: "opus"`, given `planner-prompt.md` with every `{{...}}`
-filled from the setup blob — including `{{STATE_DIR}}` and `{{SKILL_DIR}}`, this skill's own
-absolute directory, since the planner reads `explainer-skeleton.html` out of it, and
-`{{CRITERIA_NOTES}}`: the outcome of the criteria check, as corrections/additions per criterion,
-or "confirmed as written" if the user waved it through. It reads the code and produces **two
-things from one understanding**:
+Fill `repo-brief-prompt.md` from the setup blob and criteria notes, and write it to
+`<stateDir>/repo-brief.prompt.md`. Start this through the host's background shell support:
 
-- the **chunked plan**, returned as its final text — each chunk sized to fit one Claude Code
-  session (~200k tokens) and independently verifiable. This is what the implementers get.
+```bash
+scripts/run-agent.sh --role repo-brief \
+  --prompt-file <stateDir>/repo-brief.prompt.md \
+  --schema <skillDir>/schemas/repo-brief-report.schema.json \
+  --cwd <worktree> --state-dir <stateDir> \
+  --out <stateDir>/repo-brief.report.json
+```
+
+The policy routes it to read-only Codex with network disabled. When the process ends, inspect the
+small run record. Only if `reportValid:true` and the brief says `status:"ready"`, fill
+`planner-prompt.md`, including `{{REPO_BRIEF_PATH}}`, every setup value, and
+`{{CRITERIA_NOTES}}`. Write it to `<stateDir>/planner.prompt.md`, then run it the same way with
+`--role planner`, `planner-report.schema.json`, and `<stateDir>/planner.report.json`. Policy
+routes it to Claude Opus.
+
+The planner reads the evidence brief, verifies only the facts its design depends on, and produces
+**two things from one understanding**:
+
+- the schema-checked **chunked plan** in `planner.report.json` — each chunk sized to fit one agent
+  session (~200k tokens), independently verifiable, and marked `touchesUI`. This is what the
+  implementers get. `touchesUI` controls screenshot enforcement, never engine routing.
 - the **explainer**, `<stateDir>/plan-explainer.html` — the same plan re-told for the human who
   has to approve it: a self-contained page that opens with the ask and the confirmed acceptance
   criteria, shows the touched code with real excerpts, then **shows** each chunk — for UI work as
@@ -143,10 +195,10 @@ things from one understanding**:
   puts it in a question block beside the mocks that show the options, and a sticky **Copy Q&A**
   button copies every question and answer as plain text for the user to paste back in chat.
 
-**Check the explainer exists and is filled before presenting anything** — a file that is missing,
-still the bare skeleton, or a plan returned with no path is an incomplete planning step, not a
-detail. Re-spawn the planner with its own plan inline and ask for the explainer alone rather than
-presenting a plan the user has no good way to review.
+**Check the validated report and explainer before presenting anything.** A report that is invalid
+or blocked, an explainer that is missing or still the skeleton, a non-contiguous chunk index, or
+an explainer path outside the state directory is an incomplete planning step. Rerun the planner
+with the validated plan and the artifact defect in its prompt; do not present half a plan.
 
 ### 3. Approval gate — HARD STOP
 
@@ -168,16 +220,16 @@ full chunk text is there if they want it but the page is the review surface. **I
 carries open questions**, say so and say how to answer: the page's sticky **Copy Q&A** button
 copies every question with the chosen answer, and they paste that back here. Do not re-ask those
 questions as chat prose — the whole point of putting them on the page is that the options are the
-mocks. Then **wait**. Do not spawn the implementer, do not create branches, do not write code.
+mocks. Then **wait**. Do not run the implementer or write code.
 This is the whole point of the skill's interactive shape: the cheapest place to catch a wrong
 approach is before anything is built — and the gate is only as good as the reading it gets, which
 is what the explainer is for.
 
 A pasted-back Q&A block is an **answer, not an approval.** Fold the answers into the plan and say
-what changed. If an answer contradicts a chunk, re-spawn the planner with it. Then ask for the
+what changed. If an answer contradicts a chunk, rerun the planner with it. Then ask for the
 green light.
 
-**On approval, write the plan to `<stateDir>/plan.md` before spawning anything**, along with any
+**On approval, write the plan to `<stateDir>/plan.md` before running anything**, along with any
 decisions the human made at the gate — those are part of the plan now, and a chunk agent that
 re-litigates a settled question wastes a session. Until it is on disk the plan exists only in your
 context: the chunks cannot cite it, a handoff that points at it is pointing at nothing, and a
@@ -187,23 +239,23 @@ Do **not** post the plan to the issue instead. The issue is the spec; a chunked 
 plan with token estimates is process ephemera that clutters it for every later reader, and
 re-planning after feedback leaves two comments with no way to tell which is current.
 
-If the user asks for changes, re-spawn the planner with their feedback; it rewrites the plan
+If the user asks for changes, rerun the planner with their feedback; it rewrites the plan
 **and** the explainer (overwriting `plan-explainer.html`, so the file always holds the current
 plan), and you publish and present again the same way — each upload is a fresh URL, so name
 the new one and say the old one is stale. Only an explicit green light moves to step 4. The
 explainer stays in the state directory after approval, beside `plan.md` — a later reader of the
 run, or a resumed session, gets the same briefing the approver did.
 
-### 4. Implement — one sonnet subagent per chunk
+### 4. Implement — one routed subprocess per chunk
 
-**One agent per chunk, spawned in order, never in parallel.** The chunks exist because each was
+**One agent per chunk, run in order, never in parallel.** The chunks exist because each was
 sized to fill a session's context; running them all in one agent spends that budget three times
 over and the later chunks execute with the earlier ones evicted. A chunk boundary is a context
 reset, not a comment header.
 
 For each chunk in the approved plan, in order:
 
-1. Spawn a background Agent with `model: "sonnet"`, given `implementer-prompt.md` with every
+1. Fill `implementer-prompt.md` with every
    `{{...}}` filled: the chunk itself, the plan summary, the full chunk list for orientation,
    `{{SKILL_DIR}}` — this skill's own absolute directory, since the agent reads
    `handoff-prompt.md` out of it — `{{STATE_DIR}}` from the setup blob, where the plan and the
@@ -215,12 +267,17 @@ For each chunk in the approved plan, in order:
    Also hand it `uploadScript` from the setup blob — the absolute path of `pr-media-upload`'s
    `upload.sh`, when setup found one. The agent can search for it, but a path you already have
    beats a search it might get wrong on the first try, after it has done the capture work.
-2. Wait for it to report, then **read the handoff document it names** before spawning the next
+   Write the filled prompt to `<stateDir>/chunk-N.prompt.md`, then start `run-agent.sh` in the
+   background with `--role implementer --index N`, `implementer-report.schema.json`, the issue
+   worktree, state directory, and `<stateDir>/chunk-N.report.json`. Odd chunks route to Codex;
+   even chunks route to Claude Sonnet. Do not override the policy for UI work.
+2. Wait for the run record. Check `reportValid` before reading the report. Only a report with
+   `status:"green"` can advance. Then **read the handoff document it names** before running the next
    one. A path that is missing, empty, or describes a chunk that stopped early is a stop, not a
    detail.
 3. Only when it reports its chunk green and pushed does the next chunk start.
 
-Never spawn the next chunk over a chunk that stopped early, went red, or reported the plan wrong
+Never run the next chunk over a chunk that stopped early, went red, or reported the plan wrong
 — that is the failure the boundaries exist to contain. Take it to the user instead:
 
 - **Plan proved wrong** → back to the user with what the agent found. Usually the answer is
@@ -264,16 +321,19 @@ Do not merge it, and do not post `@codex review` here — step 7 does that.
 
 Before review, run `scripts/pr-status.sh <pr>`:
 
-- **conflict** → spawn a rebase agent (`sonnet`) in the worktree: `git fetch origin`, hard-reset
-  to `origin/<branch>`, rebase onto `origin/<base>`. Resolve conflicts preserving the intent of
-  both sides; re-run every verification command; force-push `--force-with-lease`. If a hunk is
-  genuinely ambiguous — both sides changed the same contract incompatibly — `git rebase --abort`
-  and escalate to the user. Never force-push a guess to turn a PR green.
-- **needsRebase** without conflict → same agent, expecting a clean rebase.
-- **red** → spawn a fix agent (`sonnet`): reproduce the failing checks in the worktree, fix the
-  root cause, never weaken tests.
+- **conflict** → fill `rebaser-prompt.md`, then run `run-agent.sh --role rebaser` with
+  `maintenance-report.schema.json`. Policy routes it to Codex. It fetches, restores the branch's
+  remote tip when necessary, rebases onto `origin/<base>`, verifies, and force-pushes with lease.
+  If both sides changed the same contract incompatibly, it aborts and reports `escalate`; never
+  force-push a guess to turn a PR green.
+- **needsRebase** without conflict → same routed rebaser, expecting a clean rebase.
+- **red** → fill `fixer-prompt.md`, including the failing check evidence, then run
+  `run-agent.sh --role fixer` with `maintenance-report.schema.json`. Policy routes it to Codex.
+  It reproduces the failure, fixes the root cause, never weakens tests, verifies, and pushes.
 - **pending** → wait; re-check rather than proceeding.
 - **green** → step 7.
+
+The rebaser/fixer report must be valid and `status:"green"` before returning to this sync check.
 
 ### 7. Codex review
 
@@ -288,14 +348,17 @@ since a verdict that arrived in an unexpected shape is indistinguishable from si
 script's level. If it really is silent, say so and hand back to the user; do not re-trigger on a
 loop.
 
-### 8. Resolve — opus subagent
+### 8. Resolve — Claude Opus subprocess
 
-With the review settled, run `scripts/codex-wait.sh findings <pr>` and spawn a background Agent
-with `model: "opus"`, given `resolver-prompt.md` with the findings inline — and with
+With the review settled, run `scripts/codex-wait.sh findings <pr>`, fill `resolver-prompt.md` with
+the findings inline — and with
 `{{ISSUE_STATED_COMMANDS}}` filled, exactly as the implementers got it. A resolver that only
 knows the root commands can fix app-local code and report it verified without ever running the
-gate the issue asked for. It fixes what is right, rebuts what is wrong with evidence, defers what
-is out of scope, verifies, pushes, and posts a round summary.
+gate the issue asked for. Write the prompt under the state directory, then start
+`run-agent.sh --role resolver` with `resolver-report.schema.json` and a round-specific report
+path. Policy routes it to Claude Opus. It fixes what is right, rebuts what is wrong with evidence,
+defers what is out of scope, verifies, pushes, and posts a round summary. Require a valid report
+with `status:"green"` before continuing.
 
 Its push moves head, so codex will read as `not-requested` again. **Return to step 6** — that is
 intended: each round gets a review of the code it is actually judging.
@@ -330,7 +393,7 @@ anything still open.
   worktree and each one builds on the last.
 - **Never collapse the chunks into one agent** because the issue looks small. If it is genuinely
   one session of work, the planner returns one chunk and that is the same thing.
-- Spawn background agents and end your turn rather than polling; completion notifications
-  re-invoke you.
+- Start agent subprocesses with the host shell's background/long-running support. Do not run a
+  long role synchronously or spin in a tight polling loop.
 - If reality contradicts expectations (PR closed by hand, branch diverged, issue reassigned),
   report it and prefer doing less over guessing.

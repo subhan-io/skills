@@ -7,8 +7,8 @@ You are planning the implementation of GitHub issue **#{{ISSUE_NUMBER}}** in `{{
 {{ISSUE_BODY}}
 ```
 
-The ask and the issue's acceptance criteria were confirmed with the human before you were
-spawned. The outcome — corrections, additions, criteria confirmed as-is — is:
+The ask and the issue's acceptance criteria were confirmed with the human before this run.
+The outcome — corrections, additions, criteria confirmed as-is — is:
 
 {{CRITERIA_NOTES}}
 
@@ -22,6 +22,12 @@ write is the explainer described below, and it goes in the run's state directory
 
 The skill driving this run lives at `{{SKILL_DIR}}`; the explainer skeleton is read from there.
 
+Codex already inspected the repository and wrote a schema-checked evidence brief at
+`{{REPO_BRIEF_PATH}}`. Read that file first. Use its paths, symbols, excerpts, instructions,
+tests, risks, and open questions to avoid repeating broad discovery. Verify any load-bearing
+claim before designing around it, and inspect a file directly when the brief is ambiguous or
+incomplete. The brief is evidence, not authority.
+
 Detected toolchain (verify before relying on it; the detection reads manifests, not reality):
 - install: `{{INSTALL_CMD}}`
 - test: `{{TEST_CMD}}`
@@ -30,12 +36,11 @@ Detected toolchain (verify before relying on it; the detection reads manifests, 
 
 ## What to produce
 
-Read the code before planning it. A plan derived from the issue text alone is a guess: open the
-files that will change, find the existing patterns the change should follow, and note the tests
-that already cover the area. Where the issue is ambiguous, say so explicitly rather than
+Plan from the evidence brief and verify the code that carries the design. A plan derived from the
+issue text alone is a guess. Where the issue is ambiguous, say so explicitly rather than
 resolving it silently — a flagged ambiguity is what the approval gate exists to catch.
 
-Split the work into **sequential chunks, each sized to fit comfortably inside one Claude Code
+Split the work into **sequential chunks, each sized to fit comfortably inside one agent
 session — target no more than ~200k tokens of context to complete it.** Estimate from concrete
 things, not vibes: how many files the chunk opens, how large they are, how much output it
 writes, how many test runs it takes to converge. A chunk that has to hold the whole schema plus
@@ -67,7 +72,8 @@ Return a plan with:
 
 1. **Summary** — what changes, in two or three sentences. This is handed to every chunk agent as
    their only picture of the whole.
-2. **Chunks**, numbered, in order. For each: a title, the files it touches, what it does, how it
+2. **Chunks**, numbered, in order. For each: a title, `touchesUI: true|false`, the files it
+   touches, what it does, how it
    is verified, what the chunks before it will have left in place that it depends on, and your
    context estimate with the reasoning behind it.
 3. **Risks and ambiguities** — anything you had to assume, anything that could break outside the
@@ -177,3 +183,11 @@ where the page earns its place:
 
 Keep each section short enough to read. This is a briefing, not documentation. One mock or one
 real excerpt beats three paragraphs about it.
+
+## Structured report
+
+Your final response is the planner report requested by the output schema, not Markdown prose.
+Use `status: "ready"` only when the plan and explainer are complete. Put the two-to-three sentence
+overview in `summary`; encode every chunk in `chunks`; and include all risks, ambiguities, and
+out-of-scope choices. `explainerPath` must be the absolute
+`{{STATE_DIR}}/plan-explainer.html` path. Use `notes` for anything the orchestrator must know.

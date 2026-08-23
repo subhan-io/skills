@@ -84,5 +84,8 @@ Hard rules:
    the resolution where the finding is.
 4. **Do not merge**, and do not re-trigger codex — the orchestrator handles the next round.
 
-Report back: what you changed, what you pushed back on, verification results as observed, and
-whether you believe the PR is now ready for a human to merge.
+Return only the structured resolver report requested by the output schema. Give every finding an
+ID, a `fixed`, `rebutted`, `deferred`, or `unresolved` disposition, and concrete evidence. Include
+actual verification exit codes, pushed SHAs, replacement screenshots or an `uncapturable` reason,
+and concise notes. Use `green` only when this round completed as intended; otherwise use `stopped`
+or `escalate`.
