@@ -81,6 +81,14 @@ The gate is mechanical:
 - A valid report can still say `blocked`, `stopped`, `plan-wrong`, or `escalate`; do not advance
   merely because its JSON is valid.
 
+**Do not repair a stopped role in the orchestrator.** Never commit its diff yourself, rewrite its
+handoff to say green, or manually finish a rebase/fix. A retry is safe without user input only
+when the report and `git status` prove the failed attempt changed no tracked files; record that it
+is a retry and run the same routed role again once. Otherwise surface the stopped report and
+worktree state to the user. Infrastructure failures that leave a complete diff still need a
+routed maintenance/resume role in a future run; they are not permission to upgrade stopped to
+green by hand.
+
 `run-agent.sh` gives every Codex writer `workspace-write`, network access, and `--add-dir` for the
 state directory. Before either engine starts, it temporarily creates each missing colocated
 `AGENTS.md -> CLAUDE.md` or `CLAUDE.md -> AGENTS.md` compatibility link. If both exist it skips
@@ -387,6 +395,8 @@ anything still open.
 - **Screenshots come from Playwright + mock data, never from `agent-browser` or any other live
   browser.** This holds for resolve and fix agents too, not just chunks — if a codex finding is
   about UI, the re-shot evidence is captured the same way.
+- Screenshot harnesses reproduce every production ancestor that affects layout, theme or design
+  tokens. A leaf component rendered under a simpler dev shell is not evidence of the shipped UI.
 - Every verification command runs from **inside the PR's worktree**.
 - One agent per worktree at a time — the step order already keeps chunk, fix, rebase and resolve
   agents from overlapping; respect it. Chunks are sequential for the same reason: they share a

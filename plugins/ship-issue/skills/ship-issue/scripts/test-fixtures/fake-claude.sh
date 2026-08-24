@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-add_dir=""; model=""
+add_dir=""; model=""; permission=""; schema=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -p|--output-format|--json-schema|--permission-mode|--model|--add-dir)
       key="$1"; value="${2:-}"
       [ "$key" = --add-dir ] && add_dir="$value"
       [ "$key" = --model ] && model="$value"
+      [ "$key" = --permission-mode ] && permission="$value"
+      [ "$key" = --json-schema ] && schema="$value"
       shift 2
       ;;
     *) shift ;;
@@ -16,6 +18,8 @@ done
 
 [ -n "$add_dir" ] || exit 70
 [ -L CLAUDE.md ] || [ -e CLAUDE.md ] || exit 71
+prompt="$(cat)"
+printf '%s\n' "permission=$permission schema=$schema prompt=$prompt" > "$add_dir/fake-claude.args"
 
 case "${FAKE_CLAUDE_MODE:-valid}" in
   valid)
