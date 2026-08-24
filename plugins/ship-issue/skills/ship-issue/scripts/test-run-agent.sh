@@ -13,7 +13,7 @@ printf '%s\n' '# Nested Claude instructions' > "$REPO/apps/one/CLAUDE.md"
 printf '%s\n' '# Both Claude' > "$REPO/apps/both/CLAUDE.md"
 printf '%s\n' '# Both Codex' > "$REPO/apps/both/AGENTS.md"
 printf '%s\n' 'Return the requested report.' > "$STATE/prompt.md"
-printf '%s\n' '{"type":"object","additionalProperties":false,"required":["status"],"properties":{"status":{"type":"string","enum":["ok"]}}}' > "$STATE/schema.json"
+printf '%s\n' '{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["status"],"properties":{"status":{"type":"string","enum":["ok"]}}}' > "$STATE/schema.json"
 
 export RUN_AGENT_CODEX_BIN="$SCRIPT_DIR/test-fixtures/fake-codex.sh"
 export RUN_AGENT_CLAUDE_BIN="$SCRIPT_DIR/test-fixtures/fake-claude.sh"
@@ -45,8 +45,37 @@ record="$("$SCRIPT_DIR/run-agent.sh" --role planner --engine claude \
   --state-dir "$STATE" --out "$STATE/claude.report.json" --timeout 5)"
 assert_jq "$record" '.engine == "claude" and .model == "opus" and .status == "ok" and .reportValid == true' \
   'Claude returns a schema-checked report'
+grep -Fq 'permission=acceptEdits' "$STATE/fake-claude.args"
+grep -Fq 'prompt=Return the requested report.' "$STATE/fake-claude.args"
+! grep -Fq '\"$schema\"' "$STATE/fake-claude.args"
+pass=$((pass + 1)); echo "ok $pass - Claude receives stdin prompt and compatible inline schema"
 test ! -e "$REPO/CLAUDE.md"
 pass=$((pass + 1)); echo "ok $pass - reciprocal instruction link is removed after the run"
+
+record="$("$SCRIPT_DIR/run-agent.sh" --role resolver --engine claude \
+  --prompt-file "$STATE/prompt.md" --schema "$STATE/schema.json" --cwd "$REPO" \
+  --state-dir "$STATE" --out "$STATE/claude-writer.report.json" --timeout 5)"
+assert_jq "$record" '.engine == "claude" and .status == "ok"' 'Claude writer returns a valid report'
+grep -Fq 'permission=bypassPermissions' "$STATE/fake-claude.args"
+pass=$((pass + 1)); echo "ok $pass - headless Claude writers can execute verification commands"
+
+MAIN_REPO="$TMP/main-repo"; LINKED="$TMP/linked"
+git init -q "$MAIN_REPO"
+git -C "$MAIN_REPO" config user.email test@example.com
+git -C "$MAIN_REPO" config user.name Test
+printf '%s\n' '# instructions' > "$MAIN_REPO/AGENTS.md"
+git -C "$MAIN_REPO" add AGENTS.md
+git -C "$MAIN_REPO" commit -qm init
+git -C "$MAIN_REPO" worktree add -q -b linked "$LINKED"
+FAKE_ARGS_LOG="$STATE/linked-codex.args" FAKE_STATE_DIR="$STATE" \
+  "$SCRIPT_DIR/run-agent.sh" --role fixer --engine codex --prompt-file "$STATE/prompt.md" \
+  --schema "$STATE/schema.json" --cwd "$LINKED" --state-dir "$STATE" \
+  --out "$STATE/linked.report.json" --timeout 5 >/dev/null
+git_dir="$(git -C "$LINKED" rev-parse --path-format=absolute --git-dir)"
+common_dir="$(git -C "$LINKED" rev-parse --path-format=absolute --git-common-dir)"
+grep -Fq "$git_dir" "$STATE/linked-codex.args"
+grep -Fq "$common_dir" "$STATE/linked-codex.args"
+pass=$((pass + 1)); echo "ok $pass - Codex writers can reach linked-worktree git metadata"
 
 set +e
 export FAKE_CODEX_MODE=invalid
@@ -84,7 +113,7 @@ grep -q 'sandbox=read-only network=false' "$STATE/fake-codex.args"
 pass=$((pass + 1)); echo "ok $pass - read-only Codex roles keep network disabled"
 
 assert_jq "$(cat "$STATE/engine-ledger.json")" \
-  '(.runs | length) == 6 and ([.runs[] | select(.engine == "codex")] | length) == 5 and (.totals.codex > 0) and (.totals.claude > 0)' \
+  '(.runs | length) == 8 and ([.runs[] | select(.engine == "codex")] | length) == 6 and (.totals.codex > 0) and (.totals.claude > 0)' \
   'the ledger records both engines and recomputes totals'
 
 # shellcheck source=engine-policy.sh

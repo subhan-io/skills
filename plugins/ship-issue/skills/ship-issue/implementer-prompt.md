@@ -108,10 +108,14 @@ taking the shots, and only then finding there is nowhere to send them. If publis
 unavailable, say so in your report and skip the capture rather than producing images no one will
 see.
 
-1. **A temporary, uncommitted, dev-only harness route** that renders *only* the component(s) you
-   changed, inside their real providers — not the whole authenticated app shell. Mirror whatever
-   dev-route pattern the repo already has, and gate it on a development-only check so it cannot
-   render in production.
+1. **A temporary, uncommitted, dev-only harness route** that renders the changed component inside
+   the same visual ancestor chain as its production route: layout shell, background container,
+   theme classes, width constraints and providers. You may omit authentication and unrelated
+   navigation, but never omit an ancestor that supplies layout or design tokens. Before capture,
+   trace the production route to its layouts and list the wrappers you reproduced. A convenient
+   existing dev harness is only a starting point; do not copy it when it intentionally excludes
+   app/admin chrome that affects the pixels being reviewed. Gate the route on a development-only
+   check so it cannot render in production.
 2. **Seed data; do not mock the network.** Pre-populate the app's own data layer (the query
    cache, the store, the context) with fixtures shaped like the real payload, configured so
    nothing ever attempts a network round-trip. This needs zero product-code changes — no new
@@ -131,6 +135,9 @@ see.
    database and fixed ports and may be off-limits to agents; your own script on your own port with
    your own fixtures is safe regardless.
    - If a shot comes back blank or mid-skeleton, **wait on a real selector**, never a sleep.
+   - Inspect every published viewport in every required theme. Compare its background, shell,
+     spacing and responsive structure with the production ancestor chain; a technically nonblank
+     screenshot that renders under the wrong shell is failed evidence, not a green UI chunk.
    - Never retry a failed browser launch in a loop. If Chromium is missing, install it once, then
      report the failure if it still won't start.
    - A dev server often paints a framework badge over the page (Next.js draws a floating dev

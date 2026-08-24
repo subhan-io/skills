@@ -14,7 +14,10 @@ Verification commands:
 - lint: `{{LINT_CMD}}`
 - issue-stated commands: `{{ISSUE_STATED_COMMANDS}}`
 
-After a successful rebase, run every applicable command and force-push with
-`--force-with-lease`. Return only the structured maintenance report requested by the output
-schema. Set `role` to `rebaser`; include actual verification exit codes, the pushed head SHA,
-empty screenshots, `uncapturable: null`, and concise notes.
+After a successful rebase, run every applicable command. **Immediately before pushing**, read the
+PR again with `gh pr view`: it must still be open, its head branch must still be `{{BRANCH}}`, and
+the remote branch must still be the tip you rebased. If it was merged/closed, retargeted, deleted,
+or advanced while you worked, do not push; report `stopped` with the changed state. Otherwise
+force-push with `--force-with-lease`. Return only the structured maintenance report requested by
+the output schema. Set `role` to `rebaser`; include actual verification exit codes, the pushed
+head SHA, empty screenshots, `uncapturable: null`, and concise notes.

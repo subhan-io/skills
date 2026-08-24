@@ -20,7 +20,8 @@ You are planning only — **write no implementation code and push nothing.** The
 write is the explainer described below, and it goes in the run's state directory
 `{{STATE_DIR}}`, which sits beside the worktree, not inside it.
 
-The skill driving this run lives at `{{SKILL_DIR}}`; the explainer skeleton is read from there.
+The canonical explainer skeleton has been staged at
+`{{STATE_DIR}}/explainer-skeleton.html` inside your writable sandbox.
 
 Codex already inspected the repository and wrote a schema-checked evidence brief at
 `{{REPO_BRIEF_PATH}}`. Read that file first. Use its paths, symbols, excerpts, instructions,
@@ -80,6 +81,19 @@ Return a plan with:
    files you listed, any existing behaviour the change would alter.
 4. **Out of scope** — what you deliberately are not doing, so the reviewer does not flag it.
 
+Before finalizing those boundaries, perform these correctness traces where applicable:
+
+- Follow every newly persisted or intermediate state value through all downstream consumers,
+  especially publish/finalize/export paths. A consumer required to preserve the issue's invariant
+  cannot be declared out of scope merely because it lives on the next screen.
+- Treat multi-record or multi-statement state transitions as atomic unless the repository makes a
+  stronger guarantee. Name the transaction boundary and a rollback test in the relevant chunk.
+- When an operation is reversible, identify how its inverse distinguishes changes made by that
+  operation from coincidentally equal pre-existing data. Require explicit provenance where value
+  comparison cannot prove ownership.
+- For UI mutations, cover fresh values at submission time, awaiting persistence before navigation,
+  double-submit prevention, failed-load recovery, and resume/reset paths in the chunk's tests.
+
 Be concrete about file paths and function names throughout. None of the agents that execute this
 have any of your context.
 
@@ -117,7 +131,7 @@ files change, how data moves through them, the exact defect, and the pattern the
 must copy. Show **real code** — short, exact excerpts with paths and line numbers — so they can
 check your reading of it. Cut anything they can guess.
 
-**Start from the skeleton: copy `{{SKILL_DIR}}/explainer-skeleton.html` to
+**Start from the skeleton: copy `{{STATE_DIR}}/explainer-skeleton.html` to
 `{{STATE_DIR}}/plan-explainer.html` and fill every `FILL` comment.** It fixes the section order,
 the styling and the question form, so every run reads the same. Your job is the content. Keep it
 self-contained — no external scripts, styles, fonts or images, and nothing that points at a

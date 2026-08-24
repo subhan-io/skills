@@ -7,7 +7,9 @@
 # Emits a JSON blob: issue, repo, baseBranch, branch, worktree, state paths, commands, warnings.
 # Repo-agnostic by detection, not by configuration — there is no env file to write first.
 set -euo pipefail
-source "$(dirname "$0")/common.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/common.sh"
 
 RAW="${1:-}"; shift || true
 [ -n "$RAW" ] || die "usage: setup.sh <issue-url-or-number> [--dry-run]"
@@ -175,6 +177,9 @@ if [ "$DRY" = false ]; then
   # screenshot harness rules exist to prevent. Here it is under the already-gitignored
   # .claude/worktrees/ path, so neither the main repo nor the worktree can see it.
   mkdir -p "$STATE"
+  # Claude planners are intentionally sandboxed to the worktree and state directory. Stage the
+  # canonical shell here so they can use it without granting write access to the installed skill.
+  cp "$SKILL_DIR/explainer-skeleton.html" "$STATE/explainer-skeleton.html"
 
   # A fresh worktree is a fresh checkout: dependencies are not shared with the main one. Left
   # undetected, the planner burns part of its budget discovering this and installing.

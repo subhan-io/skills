@@ -97,15 +97,28 @@ export "GIT_CONFIG_KEY_$git_config_index" "GIT_CONFIG_VALUE_$git_config_index"
 export GIT_CONFIG_COUNT=$((git_config_index + 1))
 
 PROMPT="$(cat "$PROMPT_FILE")"
-SCHEMA_JSON="$(jq -c . "$SCHEMA")" || die "schema is not valid JSON: $SCHEMA"
+# Claude's CLI rejects the JSON Schema dialect marker even though the schema is valid and Codex
+# accepts the file. Strip it only from the inline value sent to Claude; validation and Codex keep
+# using the canonical file unchanged.
+SCHEMA_JSON="$(jq -c 'del(."$schema")' "$SCHEMA")" || die "schema is not valid JSON: $SCHEMA"
 
 run_codex() {
   local sandbox=read-only net=false
-  local -a command
-  if role_is_writer "$ROLE"; then sandbox=workspace-write; net=true; fi
+  local -a command extra_git_dirs=()
+  if role_is_writer "$ROLE"; then
+    sandbox=workspace-write; net=true
+    # A linked worktree's writable index, HEAD and locks live outside $CWD. Without these paths,
+    # Codex can edit files but fails at git add/commit with an index.lock permission error.
+    local git_dir common_dir
+    git_dir="$(git -C "$CWD" rev-parse --path-format=absolute --git-dir 2>/dev/null)" || git_dir=""
+    common_dir="$(git -C "$CWD" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || common_dir=""
+    [ -z "$git_dir" ] || extra_git_dirs+=("$git_dir")
+    [ -z "$common_dir" ] || extra_git_dirs+=("$common_dir")
+  fi
   command=("${RUN_AGENT_CODEX_BIN:-codex}" exec --sandbox "$sandbox" -C "$CWD"
     --add-dir "$STATE_DIR" -c "sandbox_workspace_write.network_access=$net"
     --output-schema "$SCHEMA" -o "$OUT" --json)
+  for dir in "${extra_git_dirs[@]+"${extra_git_dirs[@]}"}"; do command+=(--add-dir "$dir"); done
   [ -z "$MODEL" ] || command+=(--model "$MODEL")
   command+=("$PROMPT")
   timeout --foreground --signal=TERM --kill-after=15 "$TIMEOUT_SECONDS" \
@@ -115,10 +128,17 @@ run_codex() {
 run_claude() {
   local permission=plan
   local -a command
-  role_is_writer "$ROLE" && permission=acceptEdits
+  if role_is_writer "$ROLE"; then
+    # acceptEdits still asks interactively before Bash, which deadlocks headless implementers,
+    # resolvers and maintenance agents. The planner only writes its state artifact and can keep
+    # the narrower mode.
+    case "$ROLE" in planner) permission=acceptEdits ;; *) permission=bypassPermissions ;; esac
+  fi
+  # --add-dir is variadic in Claude Code. A trailing positional prompt is consumed as another
+  # directory and the CLI starts with no prompt, so deliver it through stdin instead.
   command=("${RUN_AGENT_CLAUDE_BIN:-claude}" -p --model "$MODEL" --output-format json
-    --json-schema "$SCHEMA_JSON" --permission-mode "$permission" --add-dir "$STATE_DIR" "$PROMPT")
-  (cd "$CWD" && timeout --foreground --signal=TERM --kill-after=15 "$TIMEOUT_SECONDS" \
+    --json-schema "$SCHEMA_JSON" --permission-mode "$permission" --add-dir "$STATE_DIR")
+  (cd "$CWD" && printf '%s' "$PROMPT" | timeout --foreground --signal=TERM --kill-after=15 "$TIMEOUT_SECONDS" \
     "${command[@]}" > "$RAW" 2> "$LOG")
   local result=$?
   if [ "$result" -eq 0 ]; then
