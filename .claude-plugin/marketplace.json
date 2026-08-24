@@ -25,6 +25,15 @@
       "keywords": ["github", "issues", "code-review", "agents", "worktree"]
     },
     {
+      "name": "ship-issue-2",
+      "source": "./",
+      "skills": ["./plugins/ship-issue-2/skills/ship-issue-2"],
+      "strict": false,
+      "description": "Take one GitHub issue or adhoc task to a finished PR with Codex implementing every chunk over a resumed session: confirm criteria, plan in token-sized chunks, stop for approval, then two Codex review rounds — the human merges.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["github", "issues", "codex", "code-review", "agents"]
+    },
+    {
       "name": "pr-media-upload",
       "source": "./",
       "skills": ["./plugins/pr-media-upload/skills/pr-media-upload"],
