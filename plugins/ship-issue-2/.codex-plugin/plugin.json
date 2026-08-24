@@ -1,0 +1,25 @@
+{
+  "name": "ship-issue-2",
+  "version": "0.1.0",
+  "description": "Ship one GitHub issue or adhoc task to a finished PR, with Codex implementing every chunk.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["github", "issues", "codex", "pull-requests"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Ship Issue 2",
+    "shortDescription": "Take one issue to a finished PR with Codex.",
+    "longDescription": "Confirm acceptance criteria, resolve questions visually, plan in token-sized chunks, implement each chunk with a resumed Codex session, run tests, open a PR, and run two Codex review rounds. The human approves the plan and makes the merge.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["GitHub", "Codex", "Planning"],
+    "websiteURL": "https://github.com/subhan-io/skills",
+    "defaultPrompt": [
+      "Ship https://github.com/org/repo/issues/12",
+      "Ship this: add dark mode to the settings page"
+    ]
+  }
+}
