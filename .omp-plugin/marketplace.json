@@ -1,0 +1,60 @@
+{
+  "name": "subhan-skills",
+  "owner": {
+    "name": "Subhan Mahmood"
+  },
+  "metadata": {
+    "description": "Agent workflows and native OMP plugins"
+  },
+  "plugins": [
+    {
+      "name": "ship-issue-omp",
+      "source": "./plugins/ship-issue-omp",
+      "description": "Ship one GitHub issue or adhoc task to a reviewed PR with native OMP agents, tools, approval gates, and durable run state.",
+      "category": "development",
+      "keywords": ["omp", "github", "issues", "pull-requests", "agents"]
+    },
+    {
+      "name": "dispatch-agents",
+      "source": "./plugins/dispatch-agents",
+      "description": "Run one dispatcher tick over a repository's agent pipeline.",
+      "category": "development"
+    },
+    {
+      "name": "ship-issue",
+      "source": "./plugins/ship-issue",
+      "description": "Take one named GitHub issue through planning, implementation, review, and handoff.",
+      "category": "development"
+    },
+    {
+      "name": "ship-issue-2",
+      "source": "./plugins/ship-issue-2",
+      "description": "Ship one issue with tiered planning, fresh Codex chunks, review, and usage accounting.",
+      "category": "development"
+    },
+    {
+      "name": "plan-explainer",
+      "source": "./plugins/plan-explainer",
+      "description": "Build and publish a visual plan or decision explainer.",
+      "category": "productivity"
+    },
+    {
+      "name": "ui-evidence",
+      "source": "./plugins/ui-evidence",
+      "description": "Capture and publish evidence for user-visible changes.",
+      "category": "development"
+    },
+    {
+      "name": "codex-review",
+      "source": "./plugins/codex-review",
+      "description": "Drive a settled Codex review round and resolve its findings.",
+      "category": "development"
+    },
+    {
+      "name": "pr-media-upload",
+      "source": "./plugins/pr-media-upload",
+      "description": "Publish PR screenshots, video, GIFs, or HTML explainers.",
+      "category": "productivity"
+    }
+  ]
+}
