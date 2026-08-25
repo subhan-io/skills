@@ -1,20 +1,39 @@
 ---
 name: ship-issue-2
-description: Ship one GitHub issue or adhoc task to a finished PR — Codex implements every chunk.
+description: Ship one GitHub issue or adhoc task to a finished PR — tiered planning, one fresh Codex session per chunk, a usage ledger per run.
 disable-model-invocation: true
 ---
 
-# Ship one issue (v2, Codex-only)
+# Ship one issue (v2)
 
 One issue in, one finished PR out. The human merges; you never do. Codex writes all
-code — you orchestrate, question, plan, and verify. Keep your own context lean: let
-Codex read the repo; you read only what a decision in front of you requires.
+code — you orchestrate, question, plan, and verify.
 
-Two hard gates, in order: **criteria confirmed** (step 2) and **plan approved**
-(step 5). No code is written before both.
+**Cost on both subscriptions is turns × context.** That buys three standing rules:
+
+- Let Codex read the repo; you read only what a decision in front of you requires,
+  and batch independent tool calls into one message.
+- One **fresh** Codex session per unit of work, through `scripts/run-codex.sh`. A
+  resumed session replays its whole history every turn; the one sanctioned resume is
+  the single follow-up in step 5.
+- The deep-tier planner (step 4) is the only subagent this skill dispatches.
+
+Two hard gates, in order: **criteria and tier confirmed** (step 2) and **plan
+approved** (step 4). No code is written before both.
 
 If a step fails or reality diverges from the plan, stop and report to the human with
 what you saw. Resume only on their answer.
+
+## The ledger
+
+Every run writes usage events to a machine-central ledger
+(`~/.local/state/ship-issue/ledger.jsonl`) so a later session can audit what runs
+cost: `scripts/usage-report.sh` joins it against both harnesses' session logs.
+Three writes per run, none skippable:
+
+- `scripts/ledger.sh event=run-start issue=<n> repo=<owner/name> tier=<tier> cwd="$PWD"` — at gate 1.
+- `scripts/run-codex.sh` appends its own event per Codex session.
+- `scripts/ledger.sh event=run-end issue=<n> outcome=<pr-open|stopped|split> pr=<n> chunks=<n> reviewRounds=<n>` — when you hand over or stop.
 
 ## 1. Read the task
 
@@ -23,102 +42,89 @@ what you saw. Resume only on their answer.
 
 One issue per run. If the task bundles several, ask which one to ship first.
 
-## 2. Confirm what "finished" means
+## 2. Confirm criteria and tier — gate
 
-Draft the acceptance criteria as a short checklist and confirm them with the human
-via AskUserQuestion before any planning. Done when the human has explicitly agreed
-to a criteria list; that list is the definition of finished for the whole run.
+Draft the acceptance criteria as a short checklist, pick the tier from the table,
+and put both to the human in one AskUserQuestion: are these the criteria, and is
+this the right tier? Their answer is the definition of finished for the whole run.
+Log `run-start`.
+
+| tier | when | planning |
+|---|---|---|
+| **light** | ≤ ~3 files expected, no schema/auth change, no UI redesign | bullet plan in chat, this session writes it |
+| **standard** | everything else | plan inline this session; `plan-explainer` page only when a mock or a fork benefits from being seen |
+| **deep** | ≥2 of: schema migration · auth/payments/data-deletion · crosses app boundaries · > ~10 files expected · new subsystem | dispatch the Plan agent, `model: opus` |
 
 ## 3. Resolve open questions
 
 Iterate with the human until no decision that shapes the plan is still open. The
-human is a visual learner — show, don't describe:
+human is a visual learner — show, don't describe: small forks go through
+AskUserQuestion; anything visual, or needing more context than a question box
+carries, goes through the `plan-explainer` skill.
 
-- Small forks → AskUserQuestion.
-- Anything visual, or needing more context than a question box carries → build an
-  HTML page from `explainer-skeleton.html` (UI mocks from the app's real design
-  tokens, flow diagrams, options as selectable cards with an optional note per
-  question, sticky one-line "Copy answers" button that copies questions + answers
-  as plain text). Upload with the `pr-media-upload` skill and give the human the
-  URL; they paste answers back here.
-
-Page prose is ASD-STE100 Simplified Technical English: one idea per sentence, under
-20 words, active voice, same word for the same thing. No repo tour — the human knows
-the stack; write only about what changes.
-
-## 4. Chunk the plan
+## 4. Plan → present — gate
 
 Split the work into sequential chunks, each sized so a single Codex session stays
-inside ~150–200k tokens — the model's effective intelligence window. Every chunk
-states:
+inside ~150–200k tokens. Every chunk states the files/areas it touches, its
+deliverable, and a verify command that proves the chunk landed.
 
-- the files/areas it touches,
-- its deliverable,
-- a verify command (test, build, or script) that proves the chunk landed.
+**A plan of more than 2 chunks is a split proposal, not a plan.** Draft sub-issues
+along the plan's seams — each independently shippable and verifiable, criteria
+carried verbatim plus a "criteria and approach approved in the #<n> split" note —
+and present the split at this gate instead. On approval: create the children, mark
+any the human wants an interactive pass on, rewrite the parent into a tracker (one-
+paragraph goal plus a task list of children; move `ready-for-agent` off the parent
+and onto unblocked children — the dispatcher must never pick up the parent). Then
+ship the first child in this session as its own light/standard run; `dispatch-agents`
+drains the rest. Log the parent's run-end as `outcome=split`.
 
-## 5. Present the plan — hard stop
+Deep tier: dispatch the Plan agent (`model: opus`) with the issue, the confirmed
+criteria, the settled decisions, and file pointers — a tight prompt, not an
+invitation to wander the repo. You turn its plan into the presentation.
 
-Present the chunked plan (as an explainer page when it benefits from mocks, inline
-otherwise) and wait for explicit approval. Approval of the plan is not approval of
-scope changes discovered later — those come back to the human.
+Present per tier (light: the bullet list; standard/deep: `plan-explainer` when it
+earns it, inline otherwise) and wait for explicit approval. Approval of the plan is
+not approval of scope changes discovered later — those come back to the human.
 
-## 6. Implement — Codex only
+## 5. Implement — one fresh Codex session per chunk
 
-Dispatch the `codex:codex-rescue` agent once per chunk, sequentially, with
-`run_in_background: false`. Draft each prompt with the `codex:gpt-5-4-prompting`
-skill: the chunk's spec, its acceptance criteria, and its verify command. For a
-chunk touching user-visible code, append `screenshots.md` (in this skill's
-directory) to the prompt — screenshots are part of that chunk's deliverable.
+For each chunk, in order: draft the prompt with the `codex:gpt-5-4-prompting`
+skill — the chunk's spec, its criteria, its verify command, the paths of previous
+chunks' summaries — and always append `anti-slop.md` (in this skill's directory);
+for a chunk touching anything a user sees, also append the `ui-evidence` skill's
+content, making screenshots part of the deliverable. Then:
 
-- Chunk 1: fresh Codex run.
-- Every later chunk: include `--resume` so Codex reuses the same session — its repo
-  context is already warm; do not re-explain what earlier chunks established.
+```bash
+scripts/run-codex.sh --role chunk --issue <n> --index <i> \
+  --prompt-file <f> --out <chunk-i.last.md> --cd <repo>
+```
 
-After each chunk, run its verify command yourself. Failures go back to Codex with
-`--resume`; a chunk is done only when its verify command passes.
+Run it backgrounded; read `--out` when it finishes. Then run the chunk's verify
+command yourself. On failure, send the failure output back once with
+`--resume <sessionId>`; if it is still red after that, run one fresh session with
+the failure evidence inline; still red → stop and report. A chunk is done only when
+its verify command passes in your shell.
 
-## 7. Full test pass
+## 6. Full test pass, then the PR
 
-Run the repo's full test suite. Send any failure to Codex (`--resume`) until the
-suite is green.
+Run the repo's full test suite; failures go back to Codex as fresh `--role fix`
+sessions until green. Then branch, commit, push, `gh pr create`. Body: the issue
+link, the confirmed criteria as a checklist, the chunk summary, and — whenever any
+part of the change is user-visible — the published shots per `ui-evidence`
+(including any `un-capturable:` reasons). The PR is not open until every
+user-visible change is pictured or carries its reason.
 
-## 8. Open the PR
+## 7. Review — one round, two max
 
-Branch, commit, push, `gh pr create`. Body: the issue link, the confirmed criteria
-as a checklist, the chunk summary, and — whenever any part of the change is
-user-visible — embedded screenshots (`![alt](url)`; video as a
-`<video src="url" controls width="640">` tag on its own line).
+Run one round with the `codex-review` skill. Triage its findings yourself: valid
+ones go to a fresh `run-codex.sh --role review-fix` session (one session covers the
+round's fixes), push, and refresh any shots the fixes changed; invalid ones get a
+reply tagged `(resolver, round N)` with the evidence. A second round runs only for
+deep tier, or when round one produced a fix that changed behavior. At two rounds,
+stop and hand over what is outstanding.
 
-The PR is not open-and-done until every user-visible change is either pictured in
-the body or carries its `un-capturable:` reason from `screenshots.md`. A UI chunk
-whose report came back with neither goes back to Codex for capture before the PR
-opens — the reviewer never has to guess whether shots were skipped or impossible.
-Later pushes that change the UI (review fixes included) refresh the body's shots.
-
-## 9. Codex review loop — twice
-
-Codex is not a GitHub check — nothing in `gh pr checks` reflects it. Drive it with
-`scripts/codex-wait.sh` (in this skill's directory), which knows the completion
-signal: the bot has covered the head commit *and* gone quiet for the settle window.
-
-Run this loop two times:
-
-1. `scripts/codex-wait.sh request <pr>` — posts the `@codex review` trigger.
-2. `scripts/codex-wait.sh watch <pr>` — blocks until settled; **always run it as a
-   background command**, never in a foreground poll loop. On timeout (exit 4),
-   check `status` and keep waiting rather than reading early: an `arriving` review
-   is a truncated finding set.
-3. `scripts/codex-wait.sh findings <pr>` — the head commit's findings with
-   severity, staleness and reply counts. Branch on `resolverReplyCount` /
-   `counts.unresolved`, not `replyCount` — conversation in a thread is not
-   resolution.
-4. Triage: fix valid findings via a Codex `--resume` dispatch and push; answer
-   invalid ones with a reply comment tagged `(resolver, round N)` explaining why —
-   that marker is what the script counts as resolved.
-
-The loop iteration is done when `counts.unresolved` is zero for the head commit.
-
-## 10. Hand over
+## 8. Hand over
 
 Report to the human: the PR URL, the criteria checklist with each item's status,
-test status, and both review rounds' outcomes. Never merge — the human does.
+test status, review outcomes, and anything open. Log `run-end`. Never merge — the
+human does.

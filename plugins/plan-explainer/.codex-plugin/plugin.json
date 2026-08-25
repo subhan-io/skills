@@ -1,0 +1,21 @@
+{
+  "name": "plan-explainer",
+  "version": "0.1.0",
+  "description": "Build and publish a self-contained HTML explainer page — UI mocks, decision cards, a Copy-answers button — for plan approval and visual questions.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["planning", "html", "mocks", "review"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Plan Explainer",
+    "shortDescription": "Visual plan and decision pages the human reviews from any device.",
+    "longDescription": "Fills a skeleton HTML page with UI mocks built from the app's real design tokens, before/after behavior, and open questions as selectable cards with a Copy-answers button, then publishes it to a permanent unlisted URL.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["Planning", "Mocks"],
+    "websiteURL": "https://github.com/subhan-io/skills"
+  }
+}

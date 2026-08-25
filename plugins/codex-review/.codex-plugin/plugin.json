@@ -1,0 +1,21 @@
+{
+  "name": "codex-review",
+  "version": "0.1.0",
+  "description": "Drive one Codex review round on a GitHub PR — request, wait until settled, read the head commit's findings, and track resolution markers.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["codex", "code-review", "github", "pull-requests"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Review",
+    "shortDescription": "Request a Codex PR review and know when it has actually finished.",
+    "longDescription": "Wraps codex-wait.sh: posts the @codex review trigger, waits for the settle window, reads only reviews covering the head commit, and reports findings with staleness and resolution counts so rounds converge.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["GitHub", "Code Review", "Codex"],
+    "websiteURL": "https://github.com/subhan-io/skills"
+  }
+}
