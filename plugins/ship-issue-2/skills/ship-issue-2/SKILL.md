@@ -128,3 +128,21 @@ stop and hand over what is outstanding.
 Report to the human: the PR URL, the criteria checklist with each item's status,
 test status, review outcomes, and anything open. Log `run-end`. Never merge — the
 human does.
+
+## Under the Codex harness
+
+The native Codex plugin exposes this skill as `/ship-issue-2`. The same steps
+apply, with three adaptations:
+
+- Where a step says AskUserQuestion, ask as a short numbered list in plain text and
+  wait for the reply.
+- Where a step backgrounds `codex-wait.sh watch`, poll `codex-wait.sh status <pr>`
+  at a few-minute interval instead.
+- Chunks still run as separate sessions through `scripts/run-codex.sh` — the
+  orchestrating session's own turn count and context stay small, and the ledger
+  stays per-chunk.
+
+The companion skills (`plan-explainer`, `ui-evidence`, `codex-review`,
+`pr-media-upload`) are fellow plugins from this marketplace; where the harness does
+not surface one as an invocable skill, read its `SKILL.md` from the installed
+plugin and follow it directly.

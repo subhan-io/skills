@@ -71,23 +71,6 @@ for skill_md in "$REPO"/plugins/*/skills/*/SKILL.md; do
   linked=$((linked + 1))
 done
 
-# Codex entry points: link plugins/*/codex-prompts/*.md into ~/.codex/prompts so the
-# same workflows are invocable as /name from the Codex CLI.
-CODEX_DEST="${CODEX_PROMPTS_DIR:-$HOME/.codex/prompts}"
-for prompt_md in "$REPO"/plugins/*/codex-prompts/*.md; do
-  [ -f "$prompt_md" ] || continue
-  if [ ${#WANTED[@]} -gt 0 ]; then continue; fi   # named-skill installs skip prompts
-  pname="$(basename "$prompt_md")"
-  if $DRY; then
-    echo "would link codex prompt $pname -> $prompt_md"
-  else
-    mkdir -p "$CODEX_DEST"
-    ln -sfn "$prompt_md" "$CODEX_DEST/$pname"
-    echo "linked codex prompt $pname -> $prompt_md"
-  fi
-  linked=$((linked + 1))
-done
-
 if [ "$linked" -eq 0 ] && [ "$skipped" -eq 0 ]; then
   echo "no skills matched" >&2; exit 1
 fi

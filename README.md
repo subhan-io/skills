@@ -83,9 +83,9 @@ The lean successor to ship-issue: confirms acceptance criteria and a planning ti
 implements each chunk in a fresh Codex session via `scripts/run-codex.sh`, and runs one Codex
 review round. Every run and every Codex session appends token usage to
 `~/.local/state/ship-issue/ledger.jsonl`; `scripts/usage-report.sh` reports cost per run.
-`codex-prompts/ship-issue-2.md` (symlinked into `~/.codex/prompts` by `install.sh`) makes the
-same workflow invocable from the Codex CLI. Uses the plan-explainer, ui-evidence, and
-codex-review plugins.
+The skill carries its own Codex-harness adaptations, so the native Codex plugin runs the same
+workflow. Uses the plan-explainer, ui-evidence, and codex-review plugins — install those
+alongside it.
 
 ### plan-explainer
 
