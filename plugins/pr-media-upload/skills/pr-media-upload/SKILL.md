@@ -27,6 +27,16 @@ Codex installs it below `~/.codex/plugins/cache/<marketplace>/pr-media-upload/`.
 In every host, the reliable option is the directory this file was loaded from. Set `$upload`
 once and reuse it; the examples below assume it.
 
+**Never locate `upload.sh` with `find`/`grep` across the filesystem.** A stray old
+clone of this repo elsewhere — a `/tmp` scratch checkout, a worktree on an unrelated
+branch — can match the same path suffix (`.../pr-media-upload/upload.sh`) and silently
+shadow the correct, current copy. There is no version check on the script itself to
+catch this, so a stale copy fails quietly: it still uploads, just with the wrong
+`Content-Type` or some other regressed behaviour, and looks like success until a human
+notices the file downloads instead of renders. If your harness already named this
+skill's directory (for example a tool result reading "Base directory for this skill:
+`<path>`"), append `/upload.sh` to that exact path — don't re-derive it by searching.
+
 The script itself is cwd-independent — run it from any repo, with a relative or
 absolute file path.
 
