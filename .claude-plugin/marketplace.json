@@ -29,9 +29,36 @@
       "source": "./",
       "skills": ["./plugins/ship-issue-2/skills/ship-issue-2"],
       "strict": false,
-      "description": "Take one GitHub issue or adhoc task to a finished PR with Codex implementing every chunk over a resumed session: confirm criteria, plan in token-sized chunks, stop for approval, then two Codex review rounds — the human merges.",
+      "description": "Take one GitHub issue or adhoc task to a finished PR: confirm criteria and a planning tier, plan in token-sized chunks (splitting the issue past two chunks), implement each chunk in a fresh Codex session, one review round, a usage ledger per run — the human merges.",
       "author": { "name": "Subhan Mahmood" },
       "keywords": ["github", "issues", "codex", "code-review", "agents"]
+    },
+    {
+      "name": "plan-explainer",
+      "source": "./",
+      "skills": ["./plugins/plan-explainer/skills/plan-explainer"],
+      "strict": false,
+      "description": "Build and publish a self-contained HTML explainer page — UI mocks from real design tokens, decision forks as selectable cards, a Copy-answers button — for plan approval and visual questions.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["planning", "html", "mocks", "review"]
+    },
+    {
+      "name": "ui-evidence",
+      "source": "./",
+      "skills": ["./plugins/ui-evidence/skills/ui-evidence"],
+      "strict": false,
+      "description": "Capture and publish screenshots or video that prove a UI change — accurate shell and commit, permanent URLs for the PR body, with an un-capturable convention so shots never quietly go missing.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["screenshots", "playwright", "pull-requests"]
+    },
+    {
+      "name": "codex-review",
+      "source": "./",
+      "skills": ["./plugins/codex-review/skills/codex-review"],
+      "strict": false,
+      "description": "Drive one Codex review round on a GitHub PR — request, wait until actually settled, read the head commit's findings, and track resolution markers across rounds.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["codex", "code-review", "github", "pull-requests"]
     },
     {
       "name": "pr-media-upload",

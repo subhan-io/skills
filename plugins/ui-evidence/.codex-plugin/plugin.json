@@ -1,0 +1,21 @@
+{
+  "name": "ui-evidence",
+  "version": "0.1.0",
+  "description": "Capture and publish screenshots or video that prove a UI change — accurate shell and commit, permanent URLs for the PR body.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["screenshots", "playwright", "pull-requests"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "UI Evidence",
+    "shortDescription": "Screenshots and video proving a UI change, published for the PR.",
+    "longDescription": "Rules for capturing UI evidence on any accurate route — right shell, right commit, viewport and teardown gotchas — with an un-capturable convention so shots never quietly go missing, published via pr-media-upload.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["Screenshots", "GitHub"],
+    "websiteURL": "https://github.com/subhan-io/skills"
+  }
+}

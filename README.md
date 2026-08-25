@@ -76,6 +76,35 @@ the PR.
 Requires authenticated `gh`, `claude`, and `codex`, plus `jq`, `git`, `python3`, and GNU
 `timeout`. UI screenshots additionally use the `pr-media-upload` plugin and its prerequisites.
 
+### ship-issue-2
+
+The lean successor to ship-issue: confirms acceptance criteria and a planning tier, plans inline
+(dispatching an Opus planner only for deep work), proposes an issue split past two chunks,
+implements each chunk in a fresh Codex session via `scripts/run-codex.sh`, and runs one Codex
+review round. Every run and every Codex session appends token usage to
+`~/.local/state/ship-issue/ledger.jsonl`; `scripts/usage-report.sh` reports cost per run.
+The skill carries its own Codex-harness adaptations, so the native Codex plugin runs the same
+workflow. Uses the plan-explainer, ui-evidence, and codex-review plugins — install those
+alongside it.
+
+### plan-explainer
+
+Builds a self-contained HTML explainer page — UI mocks from the app's real design tokens,
+decision forks as selectable cards, a Copy-answers button — and publishes it to a permanent
+unlisted URL via pr-media-upload.
+
+### ui-evidence
+
+Rules for capturing screenshots or video that prove a UI change: accurate shell and commit on
+any route, viewport and teardown gotchas, and an `un-capturable:` convention so shots never
+quietly go missing. Publishes via pr-media-upload.
+
+### codex-review
+
+Drives one Codex review round on a PR with `scripts/codex-wait.sh`: requests the review, waits
+until it has actually settled, reads only findings covering the head commit, and tracks
+`(resolver, round N)` resolution markers across rounds.
+
 ### pr-media-upload
 
 Uploads a screenshot, GIF, video, or HTML demo to a public S3 bucket and prints a permanent URL

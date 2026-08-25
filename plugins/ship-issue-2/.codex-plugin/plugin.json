@@ -1,7 +1,7 @@
 {
   "name": "ship-issue-2",
   "version": "0.1.0",
-  "description": "Ship one GitHub issue or adhoc task to a finished PR, with Codex implementing every chunk.",
+  "description": "Ship one GitHub issue or adhoc task to a finished PR — tiered planning, one fresh Codex session per chunk, a usage ledger per run.",
   "author": {
     "name": "Subhan Mahmood",
     "url": "https://github.com/subhan-io"
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Ship Issue 2",
     "shortDescription": "Take one issue to a finished PR with Codex.",
-    "longDescription": "Confirm acceptance criteria, resolve questions visually, plan in token-sized chunks, implement each chunk with a resumed Codex session, run tests, open a PR, and run two Codex review rounds. The human approves the plan and makes the merge.",
+    "longDescription": "Confirm acceptance criteria and a planning tier, resolve questions visually, plan in token-sized chunks (proposing an issue split past two chunks), implement each chunk in a fresh Codex session, run tests, open a PR, and run one Codex review round — logging every session's token usage to a ledger. The human approves the plan and makes the merge.",
     "developerName": "Subhan Mahmood",
     "category": "Developer Tools",
     "capabilities": ["GitHub", "Codex", "Planning"],
