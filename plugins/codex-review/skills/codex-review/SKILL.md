@@ -9,6 +9,12 @@ description: >-
 
 # Codex review
 
+This skill drives the repository's GitHub Codex integration. A local `reviewer`
+agent, generic code review, or `gh pr checks` is not a substitute: none proves that
+GitHub Codex reviewed the PR head. If this skill or its bundled watcher cannot be
+loaded, stop and repair the plugin installation rather than silently changing the
+review mechanism.
+
 Codex is not a GitHub check — nothing in `gh pr checks` ever reflects it. You post
 the `@codex review` trigger, the review lands minutes later in one of two shapes (a
 PR review plus inline comments when it has findings; a plain issue comment when it

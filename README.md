@@ -26,6 +26,9 @@ omp plugin install codex-review@subhan-skills
 omp plugin install pr-media-upload@subhan-skills
 ```
 
+Installing only `ship-issue-omp` is incomplete: its preflight stops before the
+criteria gate when a required review or UI-evidence companion is missing.
+
 Restart OMP after installing the extension package, then run
 `/ship-issue-omp <issue-url-or-task>`. Use
 `omp plugin marketplace update subhan-skills` to refresh the catalog.
