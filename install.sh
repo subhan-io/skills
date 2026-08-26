@@ -46,6 +46,9 @@ for skill_md in "$REPO"/plugins/*/skills/*/SKILL.md; do
   src="$(dirname "$skill_md")"
   name="$(basename "$src")"
 
+  # OMP-only skills depend on native tools or extension state unavailable in Claude Code.
+  grep -q '^omp-only: true$' "$skill_md" && continue
+
   if [ ${#WANTED[@]} -gt 0 ]; then
     match=false
     for w in "${WANTED[@]}"; do [ "$w" = "$name" ] && match=true; done

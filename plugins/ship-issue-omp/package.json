@@ -1,0 +1,9 @@
+{
+  "name": "ship-issue-omp",
+  "version": "0.1.0",
+  "description": "Ship one GitHub issue or adhoc task to a reviewed PR with native OMP agents, tools, gates, and run state.",
+  "type": "module",
+  "omp": {
+    "extensions": ["./src/index.ts"]
+  }
+}

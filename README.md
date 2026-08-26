@@ -1,14 +1,34 @@
 # skills
 
-Personal agent workflows packaged as native Codex plugins, with compatibility for Claude Code.
+Personal agent workflows packaged for OMP, Codex, and Claude Code.
 
 ```text
-plugins/<name>/.codex-plugin/plugin.json  # Codex plugin manifest
 plugins/<name>/skills/<name>/SKILL.md     # skill and its bundled resources
-.agents/plugins/marketplace.json          # Codex marketplace catalog
-.claude-plugin/marketplace.json           # Claude Code marketplace catalog
-install.sh                                # optional Claude skill symlinks
+plugins/<name>/package.json               # optional OMP extension manifest
+plugins/<name>/{agents,src}/               # optional OMP agents and extension code
+.omp-plugin/marketplace.json               # OMP marketplace catalog
+.agents/plugins/marketplace.json            # Codex marketplace catalog
+.claude-plugin/marketplace.json             # Claude Code marketplace catalog
+install.sh                                  # optional Claude skill symlinks
 ```
+
+## Install in OMP
+
+Add this repository as a marketplace, then install the native ship workflow and its
+evidence/review companions:
+
+```sh
+omp plugin marketplace add subhan-io/skills
+omp plugin install ship-issue-omp@subhan-skills
+omp plugin install plan-explainer@subhan-skills
+omp plugin install ui-evidence@subhan-skills
+omp plugin install codex-review@subhan-skills
+omp plugin install pr-media-upload@subhan-skills
+```
+
+Restart OMP after installing the extension package, then run
+`/ship-issue-omp <issue-url-or-task>`. Use
+`omp plugin marketplace update subhan-skills` to refresh the catalog.
 
 ## Install in Codex
 
@@ -42,17 +62,18 @@ The existing Claude marketplace remains supported:
 
 Update later with `/plugin marketplace update subhan-skills`.
 
-On machines where you edit this repo, `./install.sh` can instead symlink every skill into
+On machines where you edit this repo, `./install.sh` can instead symlink every compatible skill into
 `~/.claude/skills`. `./install.sh -n` previews the changes, and `./install.sh dispatch-agents`
 links only one skill. A real directory is never replaced unless `-f` is passed.
+Skills marked `omp-only: true` are intentionally excluded from these Claude symlinks.
 
 ## Adding a plugin
 
 1. Create `plugins/<name>/skills/<name>/SKILL.md` and its bundled resources.
-2. Add `plugins/<name>/.codex-plugin/plugin.json`; the folder and manifest names must match.
-3. Add the plugin to `.agents/plugins/marketplace.json` and the compatibility entry to
-   `.claude-plugin/marketplace.json`.
-4. Validate the plugin and skill before pushing.
+2. For OMP extension code or agents, add `package.json`, `src/`, and `agents/` as needed.
+3. Add a Codex `.codex-plugin/plugin.json` only when the workflow works under Codex.
+4. Register the plugin in the harness-specific marketplace catalogs it actually supports.
+5. Validate the plugin, skill, agents, and extension before pushing.
 
 ## Plugins
 
@@ -65,6 +86,19 @@ state store, so a tick is resumable from a cold session.
 
 Requires authenticated `gh`, `jq`, `git`, and `python3`. Repositories outside the original
 platform setup need a `.claude/dispatch-agents.env`; see the skill itself for the complete config.
+
+### ship-issue-omp
+
+The OMP-native issue workflow. `/ship-issue-omp` confirms acceptance criteria and a planning
+tier through the native ask UI, records gates and run events through the `ship_run` extension
+tool, plans deep work with a role-routed `ship-planner`, and implements verified chunks in fresh
+`ship-chunk` task sessions. It uses structured `agent://` handoffs, `hub` follow-ups, safe
+parallel isolation for genuinely independent chunks, native GitHub PR/CI operations, UI
+evidence, and bounded Codex review. Run state is reconstructible from the OMP session; the
+machine-central ledger is `~/.local/state/ship-issue-omp/ledger.jsonl`. The human merges.
+
+Requires authenticated `gh` and the plan-explainer, ui-evidence, codex-review, and
+pr-media-upload plugins for their corresponding branches.
 
 ### ship-issue
 
