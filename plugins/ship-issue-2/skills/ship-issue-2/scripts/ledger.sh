@@ -49,7 +49,11 @@ if [ "$event" = "run-start" ]; then
     exit 1
   fi
   if [ -z "$run_id" ]; then
-    run_id="r-$(date -u +%Y%m%dT%H%M%SZ)-${issue}"
+    # Timestamp alone collides when two orchestrators start the same issue in the
+    # same second, so add entropy: uuid if available, else PID + urandom hex.
+    rand="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || true) | cut -c1-8 )"
+    [ -n "$rand" ] || rand="$$-$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    run_id="r-$(date -u +%Y%m%dT%H%M%SZ)-${issue}-${rand}"
     kvs+=("run=$run_id")
   fi
   if [ -z "$claude_session" ] && [ -n "$cwd" ]; then

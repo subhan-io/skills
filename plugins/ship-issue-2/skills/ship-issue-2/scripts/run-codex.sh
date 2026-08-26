@@ -39,6 +39,13 @@ done
 if [ -z "$role" ] || [ -z "$prompt_file" ] || [ -z "$out" ]; then
   echo "run-codex.sh: --role, --prompt-file and --out are required" >&2; exit 1
 fi
+# Without a run id the ledger event cannot be linked exactly, and usage-report.sh
+# falls back to issue+time matching — where a concurrent run on the same issue
+# absorbs this session. Refuse rather than write an unlinked event.
+if [ -z "$run_id" ]; then
+  echo "run-codex.sh: --run <runId> is required (the id printed by ledger.sh event=run-start)" >&2
+  exit 1
+fi
 [ -f "$prompt_file" ] || { echo "run-codex.sh: prompt file not found: $prompt_file" >&2; exit 1; }
 
 start_epoch=$(date +%s)
