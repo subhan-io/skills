@@ -29,11 +29,21 @@ what you saw. Resume only on their answer.
 Every run writes usage events to a machine-central ledger
 (`~/.local/state/ship-issue/ledger.jsonl`) so a later session can audit what runs
 cost: `scripts/usage-report.sh` joins it against both harnesses' session logs.
-Three writes per run, none skippable:
+None of these writes are skippable:
 
-- `scripts/ledger.sh event=run-start issue=<n> repo=<owner/name> tier=<tier> cwd="$PWD"` — at gate 1.
+- `scripts/ledger.sh event=run-start issue=<n> repo=<owner/name> tier=<tier> cwd="$PWD"`
+  — at gate 1. It **prints a run id**; keep it and stamp `run=<id>` on every later
+  ledger event and `--run <id>` on every `run-codex.sh` call. The issue must be
+  real (an adhoc slug is fine; `0` or empty is rejected).
 - `scripts/run-codex.sh` appends its own event per Codex session.
-- `scripts/ledger.sh event=run-end issue=<n> outcome=<pr-open|stopped|split> pr=<n> chunks=<n> reviewRounds=<n>` — when you hand over or stop.
+- Phase events, so cost can be attributed per step:
+  `event=phase phase=plan-approved` at gate 2; `phase=verify-failed chunk=<i>` on
+  each failed chunk verify; `phase=review-requested round=<n>` and
+  `phase=review-settled round=<n>` around each review round. Always with
+  `run=<id> issue=<n>`.
+- `scripts/ledger.sh event=run-end run=<id> issue=<n> outcome=<pr-open|stopped|split>
+  pr=<n> chunks=<n> reviewRounds=<n> findingsValid=<n> findingsInvalid=<n>
+  verifyRetries=<n>` — when you hand over or stop.
 
 ## 1. Read the task
 
@@ -47,7 +57,8 @@ One issue per run. If the task bundles several, ask which one to ship first.
 Draft the acceptance criteria as a short checklist, pick the tier from the table,
 and put both to the human in one AskUserQuestion: are these the criteria, and is
 this the right tier? Their answer is the definition of finished for the whole run.
-Log `run-start`.
+Log `run-start` and keep the run id it prints for every later ledger write and
+`run-codex.sh --run`.
 
 | tier | when | planning |
 |---|---|---|
@@ -84,7 +95,8 @@ invitation to wander the repo. You turn its plan into the presentation.
 
 Present per tier (light: the bullet list; standard/deep: `plan-explainer` when it
 earns it, inline otherwise) and wait for explicit approval. Approval of the plan is
-not approval of scope changes discovered later — those come back to the human.
+not approval of scope changes discovered later — those come back to the human. On
+approval, log `event=phase phase=plan-approved`.
 
 ## 5. Implement — one fresh Codex session per chunk
 
@@ -95,15 +107,15 @@ for a chunk touching anything a user sees, also append the `ui-evidence` skill's
 content, making screenshots part of the deliverable. Then:
 
 ```bash
-scripts/run-codex.sh --role chunk --issue <n> --index <i> \
+scripts/run-codex.sh --role chunk --issue <n> --index <i> --run <runId> \
   --prompt-file <f> --out <chunk-i.last.md> --cd <repo>
 ```
 
 Run it backgrounded; read `--out` when it finishes. Then run the chunk's verify
-command yourself. On failure, send the failure output back once with
-`--resume <sessionId>`; if it is still red after that, run one fresh session with
-the failure evidence inline; still red → stop and report. A chunk is done only when
-its verify command passes in your shell.
+command yourself. On failure, log `event=phase phase=verify-failed chunk=<i>` and
+send the failure output back once with `--resume <sessionId>`; if it is still red
+after that, run one fresh session with the failure evidence inline; still red →
+stop and report. A chunk is done only when its verify command passes in your shell.
 
 ## 6. Full test pass, then the PR
 
@@ -116,9 +128,11 @@ user-visible change is pictured or carries its reason.
 
 ## 7. Review — one round, two max
 
-Run one round with the `codex-review` skill. Triage its findings yourself: valid
-ones go to a fresh `run-codex.sh --role review-fix` session (one session covers the
-round's fixes), push, and refresh any shots the fixes changed; invalid ones get a
+Log `event=phase phase=review-requested round=<n>`, run one round with the
+`codex-review` skill, and log `phase=review-settled round=<n>` when it lands.
+Triage its findings yourself: valid ones go to a **fresh** `run-codex.sh
+--role review-fix` session — never `--resume` the chunk session for review fixes
+(one fresh session covers the round's fixes), push, and refresh any shots the fixes changed; invalid ones get a
 reply tagged `(resolver, round N)` with the evidence. A second round runs only for
 deep tier, or when round one produced a fix that changed behavior. At two rounds,
 stop and hand over what is outstanding.
