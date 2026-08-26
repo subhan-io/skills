@@ -18,6 +18,14 @@ No code or branch mutation occurs before both gates. Ordinary repository facts d
 
 `ship_run` is the run state machine and ledger writer. It persists state in the OMP session and appends events to `~/.local/state/ship-issue-omp/ledger.jsonl`. If the tool is unavailable, stop: the plugin extension is not loaded.
 
+Preflight the companion skills before the criteria gate. Always read
+`skill://codex-review`; for a user-visible task also read `skill://ui-evidence`
+and `skill://pr-media-upload`. If a required companion is unavailable, stop and
+report the exact `omp plugin install <name>@subhan-skills` command instead of
+proceeding. Never replace GitHub Codex with a local reviewer, hand-written polling
+or another review system, and never use a missing evidence skill as an
+`un-capturable:` reason.
+
 ## 1. Read and bound the task
 
 - GitHub issue URL or number: read it and its comments through `issue://<owner>/<repo>/<n>` when possible.
@@ -112,7 +120,7 @@ Sequential execution is the default. Dispatch both chunks in one `task` batch on
 
 Verify the integrated parent checkout after isolated tasks. Never run concurrent writers in one checkout or assign overlapping files.
 
-For a user-visible chunk, tell the worker to read `skill://ui-evidence` when installed and make actual browser evidence part of its deliverable. The orchestrator independently exercises the real surface after integration.
+For a user-visible chunk, give the worker the loaded `skill://ui-evidence` contract and make actual browser evidence part of its deliverable. The orchestrator independently exercises the real surface after integration.
 
 ### Chunk verification and correction
 
@@ -138,7 +146,7 @@ After every chunk passes:
 
 1. run the repository's full applicable test suite once;
 2. run the actual smoke scenario for the changed behavior;
-3. for UI work, verify the real surface and publish evidence or an explicit `un-capturable:` reason;
+3. for UI work, follow `skill://ui-evidence`: distinguish preview access from application authentication, exhaust the real route, sanctioned writable scratch data and temporary production-shell fixture harness, then publish evidence; use `un-capturable:` only when all accurate routes are unavailable, naming each attempted route and blocker;
 4. inspect the resulting change as the user would;
 5. commit on the feature branch;
 6. push with the native `github` tool when it can resolve the branch, otherwise use one explicit Git push;
@@ -156,7 +164,7 @@ ship_run op=record_pr prUrl=<url> tests=<local-and-CI-status>
 
 ## 8. Review — one round, two maximum
 
-Run one round through `skill://codex-review`. Its watcher is a finite background command under OMP; let completion self-deliver instead of polling. Triage every settled finding:
+Run one round through the loaded `skill://codex-review`; the repository's GitHub Codex review is authoritative and a local reviewer is not a fallback. Its watcher is a finite background command under OMP; let completion self-deliver instead of polling. If the skill or watcher becomes unavailable, stop and repair the plugin installation.
 
 - valid: one fresh `ship-fixer` task for the round, then verify, push, and refresh affected UI evidence;
 - invalid: reply with `(resolver, round N)` and concrete evidence.

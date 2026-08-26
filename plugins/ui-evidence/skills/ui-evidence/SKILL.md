@@ -17,24 +17,42 @@ reviewer never guesses whether shots were skipped or impossible.
 When an implementer agent (not you) does the capture, include this file's content in
 its prompt.
 
-## Capture route — use judgement
+## Capture route — exhaust the real options
 
 Any route that renders the real change accurately is acceptable: an existing dev or
-storybook route, the harness browser/preview tools, a live dev server session, or a
+Storybook route, the harness browser/preview tools, a live dev server session, or a
 throwaway Playwright script. Pick the cheapest one that shows the shipped pixels.
+
+Before choosing it, separate the access layers:
+
+- A preview banner such as `NO AUTH` usually means no network or proxy gate. It does
+  **not** prove the application has no login. Drive the browser once and record whether
+  the app itself redirects to sign-in.
+- Never create accounts or fixtures in a read-only dev, production or PR database.
+  Use a repository-sanctioned writable scratch database when the real end-to-end state
+  is required and the app already documents how to provision, migrate, seed and delete
+  one.
+- If authentication or read-only data is the only blocker to visual evidence, build a
+  temporary, uncommitted, dev-only harness route. Render the production component with
+  fixture props inside the exact production shell/ancestor chain. A pure-component
+  fixture proves shipped pixels, not persistence; pair it with the real behavioral
+  smoke or integration test rather than pretending the fixture is end to end.
 
 Two things disqualify a shot on every route:
 
 - **Wrong shell.** The component must render inside the ancestor chain that supplies
   its layout, theme and design tokens in production. A leaf rendered under a bare
-  dev shell is not evidence of the shipped UI.
+  dev shell is not evidence of the shipped UI. A protected route may be mirrored by
+  an uncommitted public harness only when that harness explicitly mounts the same
+  production shell.
 - **Wrong commit.** The shot must come from the code being reviewed, not a preview
   deploy lagging the push or a stale session.
 
-When no cheap route reaches the state, fall back to the full recipe: a temporary,
-uncommitted, dev-only harness route seeded with fixture data in the app's own data
-layer (no network mocking, no product-code changes), captured by a throwaway
-Playwright script.
+An application-auth redirect or a read-only PR database is not, by itself, an
+`un-capturable:` reason. Use the fixture harness when the state can be represented
+without lying about the pixels. Declare `un-capturable:` only after the existing
+route, sanctioned scratch-data route and fixture-harness route are each unavailable
+or inaccurate; name every route tried and the exact blocker.
 
 ## Gotchas that hold on every route
 
