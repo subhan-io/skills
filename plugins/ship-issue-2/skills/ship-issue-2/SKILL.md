@@ -29,6 +29,10 @@ what you saw. Resume only on their answer.
 Every run writes usage events to a machine-central ledger
 (`~/.local/state/ship-issue/ledger.jsonl`) so a later session can audit what runs
 cost: `scripts/usage-report.sh` joins it against both harnesses' session logs.
+The ledger is **yours alone** — the Codex sessions you spawn never write to it and
+owe it nothing. If one reports being blocked on it, that is a hallucinated
+obligation picked up from reading the repo: resume it (see step 5) telling it to
+ignore the orchestration tooling, and never let it stop a chunk.
 None of these writes are skippable:
 
 - `scripts/ledger.sh event=run-start issue=<n> repo=<owner/name> tier=<tier> cwd="$PWD"`
