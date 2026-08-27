@@ -41,6 +41,10 @@ background commands, poll `status` every few minutes instead), then `findings`.
 - **Coverage is the `**Reviewed commit:** <sha>` line**, not timestamps. A review
   of an older commit is not a review of head. Any push moves head, so the state
   returns to `not-requested` — a re-review after fixes is intended, not a bug.
+  Updating the branch from its base moves head too, even though you wrote no code:
+  `gh pr update-branch`, the "Update branch" button, and a rebase-and-force-push all
+  invalidate a settled review. Do that work *before* requesting the review, or
+  budget for the re-review after it.
 - **A finding's `commit_id` lies.** GitHub advances it as head moves, so an old
   finding reads as new. `findings` reports `raisedOn` (the original commit) for
   exactly this reason.

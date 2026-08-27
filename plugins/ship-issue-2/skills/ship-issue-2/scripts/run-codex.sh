@@ -58,7 +58,10 @@ codex_args=(--cd "$cd_dir" --sandbox workspace-write \
 err_file="$(mktemp)"
 trap 'rm -f "$err_file"' EXIT
 if [ -n "$resume" ]; then
-  codex exec resume "$resume" "${codex_args[@]}" - < "$prompt_file" 2> >(tee "$err_file" >&2)
+  # `--cd` and `--sandbox` are options of `codex exec` itself, not of its
+  # `resume` subcommand, so they MUST precede `resume` — putting them after it
+  # fails with "unexpected argument '--cd' found" and no session ever starts.
+  codex exec "${codex_args[@]}" resume "$resume" - < "$prompt_file" 2> >(tee "$err_file" >&2)
 else
   codex exec "${codex_args[@]}" - < "$prompt_file" 2> >(tee "$err_file" >&2)
 fi
