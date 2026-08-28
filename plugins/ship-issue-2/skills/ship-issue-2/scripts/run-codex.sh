@@ -81,8 +81,17 @@ else
 fi
 if [ -n "$rollout" ]; then
   session_id="$(head -1 "$rollout" | jq -r '.payload.session_id // .payload.id // empty' 2>/dev/null)"
-  tokens_json="$(grep -o '"total_token_usage":{[^}]*}' "$rollout" | tail -1 | sed 's/^"total_token_usage"://')"
-  [ -n "$tokens_json" ] || tokens_json="null"
+  # A fast-failing invocation can match a PREVIOUS session's rollout (still fresh,
+  # same cwd) and double-count its tokens. If this session id is already in the
+  # ledger and we didn't resume it, the match is stale — record nothing.
+  LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
+  if [ -z "$resume" ] && [ -n "$session_id" ] && [ -f "$LEDGER" ] \
+     && grep -q "\"sessionId\":\"$session_id\"" "$LEDGER"; then
+    session_id="" rollout=""
+  else
+    tokens_json="$(grep -o '"total_token_usage":{[^}]*}' "$rollout" | tail -1 | sed 's/^"total_token_usage"://')"
+    [ -n "$tokens_json" ] || tokens_json="null"
+  fi
 fi
 
 error=""
