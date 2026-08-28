@@ -11,9 +11,10 @@ survey the epic, ship the next unblocked sub-issue(s), report, stop. The human
 merges PRs between ticks; re-invoke to continue. All of `ship-issue`'s gates,
 ledger writes, and cost rules apply unchanged inside each run.
 
-With `afk` in the invocation, each pick instead runs as a dispatched agent
-session in `ship-issue` AFK mode — self-contained, self-merging — and the tick
-drains every eligible sub-issue before stopping.
+With `afk` in the invocation, each pick instead runs as its own dispatched CLI
+session in `ship-issue` AFK mode — self-contained, self-merging, its transcript
+watchable in t3code — and the tick drains every eligible sub-issue before
+stopping.
 
 ## 1. Survey
 
@@ -45,16 +46,27 @@ end, in this session. Its criteria gate stays live — the epic body's decisions
 are context for the criteria draft, not a substitute for the human's
 confirmation.
 
-AFK (the invocation says `afk`): dispatch the pick as its own Agent session so
-it shows up as a clickable child of this orchestrator:
+AFK (the invocation says `afk`): dispatch the pick as its own **CLI session**,
+not an Agent-tool subagent — a real session gets a full transcript the human can
+open and watch in t3code, where a subagent shows only title and token count:
 
-- `Agent` with `subagent_type: claude`, `description: "ship-issue #<n>"`, and a
-  prompt of one job: invoke the `ship-issue` skill with `afk #<n>` in a fresh
-  worktree of `<repo>`, and return the handover report.
+- Make a fresh worktree of `<repo>`, then background:
+
+  ```bash
+  claude -p "Invoke the ship-issue skill with: afk #<n>. When it finishes, post the
+  handover report as a comment on issue #<n>." \
+    --dangerously-skip-permissions   # the worktree is the blast radius
+  ```
+
+  Run it via Bash with `run_in_background: true` from the worktree directory.
+- The issue comment is the completion signal and the report channel: when the
+  background job exits, read that comment (and the ledger's `run-end`) for the
+  outcome. The session also stays reachable by name via SendMessage while it
+  runs.
 - Independent picks may run concurrently; a pick whose blocker is in flight
-  waits for that agent's merge.
-- An agent that reports not-AFK-eligible (deep tier, unanswerable question)
-  parks its sub-issue for an attended tick — never retry it AFK.
+  waits for that blocker's merge.
+- A run that reports not-AFK-eligible (deep tier, unanswerable question) parks
+  its sub-issue for an attended tick — never retry it AFK.
 
 ## 4. Continue or report
 
@@ -62,7 +74,7 @@ Attended: after handover, loop to step 2 only when the next pick is independent
 of every PR this tick opened, and at most two sub-issues have shipped this
 session — past that, context outgrows the tick.
 
-AFK: runs self-merge, so keep draining — after each agent's report, refresh the
+AFK: runs self-merge, so keep draining — after each run's report, refresh the
 survey and dispatch the next unblocked pick, until the epic has no eligible open
 sub-issue left.
 
