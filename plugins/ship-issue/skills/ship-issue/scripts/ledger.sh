@@ -57,8 +57,8 @@ fi
 
 if [ "$event" = "run-end" ]; then
   case "$outcome" in
-    pr-open|stopped|split) ;;
-    *) echo "ledger.sh: run-end requires outcome=<pr-open|stopped|split>, got '$outcome'" >&2
+    pr-open|merged|stopped|split) ;;
+    *) echo "ledger.sh: run-end requires outcome=<pr-open|merged|stopped|split>, got '$outcome'" >&2
        exit 1 ;;
   esac
 fi

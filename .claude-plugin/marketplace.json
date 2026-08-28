@@ -7,27 +7,12 @@
   "description": "Personal agent skills, installable on any machine",
   "plugins": [
     {
-      "name": "dispatch-agents",
-      "source": "./",
-      "skills": ["./plugins/dispatch-agents/skills/dispatch-agents"],
-      "strict": false,
-      "description": "Run one dispatcher tick over a repo's agent pipeline: shepherd agent PRs through checks, codex review and adversarial review, rebase after merges, and dispatch ready issues to background implementers in isolated worktrees.",
-      "author": { "name": "Subhan Mahmood" },
-      "keywords": ["orchestration", "github", "code-review", "agents"]
-    },
-    {
       "name": "ship-issue",
       "source": "./",
-      "skills": ["./plugins/ship-issue/skills/ship-issue"],
-      "strict": false,
-      "description": "Take one named GitHub issue end to end in a fresh worktree: build a Codex repository brief, plan with Opus, stop for approval, alternate chunks across Codex and Sonnet, then review and resolve — leaving a green PR for the human to merge.",
-      "author": { "name": "Subhan Mahmood" },
-      "keywords": ["github", "issues", "code-review", "agents", "worktree"]
-    },
-    {
-      "name": "ship-issue-2",
-      "source": "./",
-      "skills": ["./plugins/ship-issue-2/skills/ship-issue-2"],
+      "skills": [
+        "./plugins/ship-issue/skills/ship-issue",
+        "./plugins/ship-issue/skills/ship-epic"
+      ],
       "strict": false,
       "description": "Take one GitHub issue or adhoc task to a finished PR: confirm criteria and a planning tier, plan in token-sized chunks (splitting the issue past two chunks), implement each chunk in a fresh Codex session, one review round, a usage ledger per run — the human merges.",
       "author": { "name": "Subhan Mahmood" },

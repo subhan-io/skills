@@ -4,7 +4,7 @@
 #   ./install.sh              # link all skills
 #   ./install.sh -n           # dry run: print what would change, touch nothing
 #   ./install.sh -f           # replace real directories (not just stale symlinks)
-#   ./install.sh dispatch-agents [...]   # link only the named skills
+#   ./install.sh ship-issue [...]   # link only the named skills
 #
 # Symlinks (not copies) so `git pull` in this repo updates every machine's skills at once.
 # The alternative install path — `/plugin marketplace add subhan-io/skills` — does not use
