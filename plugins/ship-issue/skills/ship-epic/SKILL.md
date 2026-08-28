@@ -62,7 +62,10 @@ where an Agent-tool subagent shows only title and token count:
   It prints the created threadId. First use pairs with the local t3 server and
   caches a bearer under `~/.local/state/ship-issue/`.
 - The issue comment is the completion signal and the report channel: poll it
-  (and the ledger's `run-end`) at a few-minute interval for the outcome.
+  (and the ledger's `run-end`) at a few-minute interval for the outcome. When a
+  run's outcome is `merged`, settle its thread —
+  `scripts/t3-dispatch.sh settle <threadId>` — so the sidebar shows only runs
+  that still need the human. Any other outcome leaves the thread unsettled.
 - Independent picks may run concurrently; a pick whose blocker is in flight
   waits for that blocker's merge.
 - A run that reports not-AFK-eligible (deep tier, unanswerable question) parks

@@ -5,6 +5,7 @@
 # Usage:
 #   t3-dispatch.sh --project-root <abs-path> --title "ship-issue #23" \
 #     --prompt-file <file> [--model <model>] [--worktree <abs-path> --branch <name>]
+#   t3-dispatch.sh settle <threadId>     # clear the thread's attention marker
 #
 # Prints the created threadId on stdout.
 #
@@ -14,7 +15,8 @@
 set -euo pipefail
 
 MODEL="claude-fable-5"
-WORKTREE="" BRANCH="" PROJECT_ROOT="" TITLE="" PROMPT_FILE=""
+WORKTREE="" BRANCH="" PROJECT_ROOT="" TITLE="" PROMPT_FILE="" SETTLE_THREAD=""
+if [ "${1:-}" = "settle" ]; then SETTLE_THREAD="${2:?settle needs a threadId}"; shift 2; fi
 while [ $# -gt 0 ]; do
   case "$1" in
     --project-root) PROJECT_ROOT="$2"; shift 2;;
@@ -26,8 +28,9 @@ while [ $# -gt 0 ]; do
     *) echo "unknown flag: $1" >&2; exit 2;;
   esac
 done
-[ -n "$PROJECT_ROOT" ] && [ -n "$TITLE" ] && [ -n "$PROMPT_FILE" ] || {
-  echo "required: --project-root --title --prompt-file" >&2; exit 2; }
+if [ -z "$SETTLE_THREAD" ] && { [ -z "$PROJECT_ROOT" ] || [ -z "$TITLE" ] || [ -z "$PROMPT_FILE" ]; }; then
+  echo "required: --project-root --title --prompt-file (or: settle <threadId>)" >&2; exit 2
+fi
 
 T3_HOME="${T3CODE_HOME:-$HOME/.t3}"
 ORIGIN=$(python3 -c "import json;print(json.load(open('$T3_HOME/userdata/server-runtime.json'))['origin'])")
@@ -57,6 +60,17 @@ dispatch() { # $1 = json payload; prints http code, body to /tmp/t3-dispatch-res
 
 [ -f "$TOKEN_FILE" ] || mint_token
 
+uuid() { python3 -c "import uuid;print(uuid.uuid4())"; }
+
+if [ -n "$SETTLE_THREAD" ]; then
+  SETTLE="{\"type\":\"thread.settle\",\"commandId\":\"$(uuid)\",\"threadId\":\"$SETTLE_THREAD\"}"
+  CODE=$(dispatch "$SETTLE")
+  if [ "$CODE" = "401" ]; then mint_token; CODE=$(dispatch "$SETTLE"); fi
+  [ "$CODE" = "200" ] || { echo "thread.settle failed ($CODE): $(cat /tmp/t3-dispatch-resp.$$)" >&2; exit 1; }
+  rm -f /tmp/t3-dispatch-resp.$$
+  exit 0
+fi
+
 PROJECT_ID=$(python3 - "$PROJECT_ROOT" <<'EOF'
 import json,sqlite3,sys,os
 root=os.path.realpath(sys.argv[1])
@@ -68,7 +82,6 @@ else: sys.exit(f"no t3 project with workspace_root {root}")
 EOF
 )
 
-uuid() { python3 -c "import uuid;print(uuid.uuid4())"; }
 NOW=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 THREAD_ID=$(uuid)
 PROMPT=$(python3 -c "import json,sys;print(json.dumps(open(sys.argv[1]).read()))" "$PROMPT_FILE")
