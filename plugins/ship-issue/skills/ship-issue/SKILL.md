@@ -24,6 +24,24 @@ approved** (step 4). No code is written before both.
 If a step fails or reality diverges from the plan, stop and report to the human with
 what you saw. Resume only on their answer.
 
+## AFK mode
+
+When the invocation says `afk`, the run is unattended: both gates self-resolve and
+the run merges its own PR. The rules that change:
+
+- **Eligibility.** Light and standard tiers only. A deep-tier issue, or one whose
+  criteria you cannot state confidently from the issue body and comments, is not
+  AFK-eligible — stop and report why instead of guessing. Fail closed.
+- **Gate 1**: derive the criteria from the issue; log them in the run-start report
+  instead of asking. **Step 3**: an open question with no answer in the issue is an
+  eligibility failure, not a guess. **Gate 2**: self-approve the plan; a plan past
+  2 chunks still becomes a split proposal, reported back, never executed.
+- **Merge**: after the review round settles and the PR is green, merge it —
+  `gh pr merge <n> --squash --delete-branch` — and log `run-end outcome=merged`.
+  Anything short of green hands over as usual, unmerged.
+- The handover report (step 8) still happens in full — it is the only record the
+  human gets.
+
 ## The ledger
 
 Every run writes usage events to a machine-central ledger
@@ -43,7 +61,7 @@ None of these writes are skippable:
   `phase=review-requested round=<n>` and `phase=review-settled round=<n>` around
   each review round. Always with `run=<id> issue=<n>`. `ledger.sh` rejects phase
   names outside this set — an event it refuses is a step this skill doesn't have.
-- `scripts/ledger.sh event=run-end run=<id> issue=<n> outcome=<pr-open|stopped|split>
+- `scripts/ledger.sh event=run-end run=<id> issue=<n> outcome=<pr-open|merged|stopped|split>
   pr=<n> chunks=<n> reviewRounds=<n> findingsValid=<n> findingsInvalid=<n>
   verifyRetries=<n>` — when you hand over or stop.
 

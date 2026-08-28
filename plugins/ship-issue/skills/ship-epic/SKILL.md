@@ -11,6 +11,10 @@ survey the epic, ship the next unblocked sub-issue(s), report, stop. The human
 merges PRs between ticks; re-invoke to continue. All of `ship-issue`'s gates,
 ledger writes, and cost rules apply unchanged inside each run.
 
+With `afk` in the invocation, each pick instead runs as a dispatched agent
+session in `ship-issue` AFK mode — self-contained, self-merging — and the tick
+drains every eligible sub-issue before stopping.
+
 ## 1. Survey
 
 Read the epic (`gh issue view <n>`) and its native sub-issues:
@@ -36,15 +40,32 @@ sub-issue waits on (a merge, a review, a human answer) and stop the tick.
 
 ## 3. Ship
 
-Run the `ship-issue` skill on the picked sub-issue, end to end, in this
-session. Its criteria gate stays live — the epic body's decisions are context
-for the criteria draft, not a substitute for the human's confirmation.
+Attended (default): run the `ship-issue` skill on the picked sub-issue, end to
+end, in this session. Its criteria gate stays live — the epic body's decisions
+are context for the criteria draft, not a substitute for the human's
+confirmation.
+
+AFK (the invocation says `afk`): dispatch the pick as its own Agent session so
+it shows up as a clickable child of this orchestrator:
+
+- `Agent` with `subagent_type: claude`, `description: "ship-issue #<n>"`, and a
+  prompt of one job: invoke the `ship-issue` skill with `afk #<n>` in a fresh
+  worktree of `<repo>`, and return the handover report.
+- Independent picks may run concurrently; a pick whose blocker is in flight
+  waits for that agent's merge.
+- An agent that reports not-AFK-eligible (deep tier, unanswerable question)
+  parks its sub-issue for an attended tick — never retry it AFK.
 
 ## 4. Continue or report
 
-After handover, loop to step 2 only when the next pick is independent of every
-PR this tick opened, and at most two sub-issues have shipped this session —
-past that, context outgrows the tick.
+Attended: after handover, loop to step 2 only when the next pick is independent
+of every PR this tick opened, and at most two sub-issues have shipped this
+session — past that, context outgrows the tick.
 
-End every tick with the status table from step 1, refreshed: what shipped,
-what waits on the human, and what the next tick will pick up.
+AFK: runs self-merge, so keep draining — after each agent's report, refresh the
+survey and dispatch the next unblocked pick, until the epic has no eligible open
+sub-issue left.
+
+End every tick with the status table from step 1, refreshed: what shipped or
+merged, what is parked for an attended tick, what waits on the human, and what
+the next tick will pick up.
