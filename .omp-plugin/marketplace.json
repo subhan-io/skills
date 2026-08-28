@@ -15,20 +15,8 @@
       "keywords": ["omp", "github", "issues", "pull-requests", "agents"]
     },
     {
-      "name": "dispatch-agents",
-      "source": "./plugins/dispatch-agents",
-      "description": "Run one dispatcher tick over a repository's agent pipeline.",
-      "category": "development"
-    },
-    {
       "name": "ship-issue",
       "source": "./plugins/ship-issue",
-      "description": "Take one named GitHub issue through planning, implementation, review, and handoff.",
-      "category": "development"
-    },
-    {
-      "name": "ship-issue-2",
-      "source": "./plugins/ship-issue-2",
       "description": "Ship one issue with tiered planning, fresh Codex chunks, review, and usage accounting.",
       "category": "development"
     },
