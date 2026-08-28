@@ -103,6 +103,10 @@ The skill carries its own Codex-harness adaptations, so the native Codex plugin 
 workflow. Uses the plan-explainer, ui-evidence, and codex-review plugins — install those
 alongside it.
 
+The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues: each
+invocation is one tick that surveys the epic, ships the next unblocked sub-issue through
+`/ship-issue`, and reports. The human merges between ticks.
+
 ### plan-explainer
 
 Builds a self-contained HTML explainer page — UI mocks from the app's real design tokens,

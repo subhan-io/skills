@@ -86,10 +86,9 @@ along the plan's seams — each independently shippable and verifiable, criteria
 carried verbatim plus a "criteria and approach approved in the #<n> split" note —
 and present the split at this gate instead. On approval: create the children, mark
 any the human wants an interactive pass on, rewrite the parent into a tracker (one-
-paragraph goal plus a task list of children; move `ready-for-agent` off the parent
-and onto unblocked children — the dispatcher must never pick up the parent). Then
-ship the first child in this session as its own light/standard run; later runs of
-this skill drain the rest. Log the parent's run-end as `outcome=split`.
+paragraph goal plus a task list of children, with the build order stated). Then
+ship the first child in this session as its own light/standard run; the
+`ship-epic` skill drains the rest. Log the parent's run-end as `outcome=split`.
 
 Deep tier: dispatch the Plan agent (`model: opus`) with the issue, the confirmed
 criteria, the settled decisions, and file pointers — a tight prompt, not an

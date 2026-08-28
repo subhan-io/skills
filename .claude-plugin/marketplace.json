@@ -9,7 +9,10 @@
     {
       "name": "ship-issue",
       "source": "./",
-      "skills": ["./plugins/ship-issue/skills/ship-issue"],
+      "skills": [
+        "./plugins/ship-issue/skills/ship-issue",
+        "./plugins/ship-issue/skills/ship-epic"
+      ],
       "strict": false,
       "description": "Take one GitHub issue or adhoc task to a finished PR: confirm criteria and a planning tier, plan in token-sized chunks (splitting the issue past two chunks), implement each chunk in a fresh Codex session, one review round, a usage ledger per run — the human merges.",
       "author": { "name": "Subhan Mahmood" },
