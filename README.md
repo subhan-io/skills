@@ -106,8 +106,9 @@ alongside it.
 The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues: each
 invocation is one tick that surveys the epic, ships the next unblocked sub-issue through
 `/ship-issue`, and reports. The human merges between ticks. `/ship-epic afk` instead
-dispatches each pick as its own agent session running `/ship-issue afk` — unattended
-light/standard runs that self-merge on green — and drains the epic in one invocation.
+dispatches each pick as its own t3code sidebar thread (via the local t3 server's HTTP
+dispatch API) running `/ship-issue afk` — unattended light/standard runs that self-merge
+on green — and drains the epic in one invocation.
 
 ### plan-explainer
 
