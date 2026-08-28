@@ -37,10 +37,12 @@ None of these writes are skippable:
   real (an adhoc slug is fine; `0` or empty is rejected).
 - `scripts/run-codex.sh` appends its own event per Codex session.
 - Phase events, so cost can be attributed per step:
-  `event=phase phase=plan-approved` at gate 2; `phase=verify-failed chunk=<i>` on
-  each failed chunk verify; `phase=review-requested round=<n>` and
-  `phase=review-settled round=<n>` around each review round. Always with
-  `run=<id> issue=<n>`.
+  `event=phase phase=plan-approved` at gate 2; `phase=planner-done` when a deep-tier
+  Plan agent returns (its Opus cost is invisible to the ledger otherwise);
+  `phase=verify-failed chunk=<i>` on each failed chunk verify;
+  `phase=review-requested round=<n>` and `phase=review-settled round=<n>` around
+  each review round. Always with `run=<id> issue=<n>`. `ledger.sh` rejects phase
+  names outside this set — an event it refuses is a step this skill doesn't have.
 - `scripts/ledger.sh event=run-end run=<id> issue=<n> outcome=<pr-open|stopped|split>
   pr=<n> chunks=<n> reviewRounds=<n> findingsValid=<n> findingsInvalid=<n>
   verifyRetries=<n>` — when you hand over or stop.
@@ -91,7 +93,8 @@ drains the rest. Log the parent's run-end as `outcome=split`.
 
 Deep tier: dispatch the Plan agent (`model: opus`) with the issue, the confirmed
 criteria, the settled decisions, and file pointers — a tight prompt, not an
-invitation to wander the repo. You turn its plan into the presentation.
+invitation to wander the repo. Log `event=phase phase=planner-done` when it
+returns. You turn its plan into the presentation.
 
 Present per tier (light: the bullet list; standard/deep: `plan-explainer` when it
 earns it, inline otherwise) and wait for explicit approval. Approval of the plan is
@@ -104,7 +107,13 @@ For each chunk, in order: draft the prompt with the `codex:gpt-5-4-prompting`
 skill — the chunk's spec, its criteria, its verify command, the paths of previous
 chunks' summaries — and always append `anti-slop.md` (in this skill's directory);
 for a chunk touching anything a user sees, also append the `ui-evidence` skill's
-content, making screenshots part of the deliverable. Then:
+content, making screenshots part of the deliverable.
+
+Write the sandbox split into every prompt: Codex runs the checks that work inside
+its sandbox (typecheck, unit tests, lint) and reports their output; the full and
+integration suites, and the commit, are yours — the sandbox has no Docker and a
+read-only `.git`, so a prompt that asks for a full-test gate or a commit SHA buys
+turns of Codex rediscovering that. Then:
 
 ```bash
 scripts/run-codex.sh --role chunk --issue <n> --index <i> --run <runId> \
@@ -128,12 +137,20 @@ user-visible change is pictured or carries its reason.
 
 ## 7. Review — one round, two max
 
-Log `event=phase phase=review-requested round=<n>`, run one round with the
+Before requesting anything: run the repo's lint and anti-slop checks yourself and
+reread the diff against `anti-slop.md` — every finding you catch here is a review
+round you don't pay for. Findings the reviewer would raise are cheapest fixed
+before it ever looks.
+
+Then log `event=phase phase=review-requested round=<n>`, run one round with the
 `codex-review` skill, and log `phase=review-settled round=<n>` when it lands.
-Triage its findings yourself: valid ones go to a **fresh** `run-codex.sh
---role review-fix` session — never `--resume` the chunk session for review fixes
-(one fresh session covers the round's fixes), push, and refresh any shots the fixes changed; invalid ones get a
-reply tagged `(resolver, round N)` with the evidence. A second round runs only for
+Triage its findings yourself — read the code each one points at and decide from
+the code, not the finding's confidence; a triage that waves everything through is
+a rubber stamp, and some findings *are* wrong. Valid ones go to a **fresh**
+`run-codex.sh --role review-fix` session — never `--resume` the chunk session for
+review fixes (one fresh session covers the round's fixes), push, and refresh any
+shots the fixes changed; invalid ones get a reply tagged `(resolver, round N)`
+with the evidence. A second round runs only for
 deep tier, or when round one produced a fix that changed behavior. At two rounds,
 stop and hand over what is outstanding.
 

@@ -26,7 +26,7 @@ set -euo pipefail
 LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
 mkdir -p "$(dirname "$LEDGER")"
 
-event="" issue="" run_id="" cwd="" claude_session=""
+event="" issue="" run_id="" cwd="" claude_session="" phase="" outcome=""
 kvs=()
 for kv in "$@"; do
   key="${kv%%=*}"; val="${kv#*=}"
@@ -39,9 +39,29 @@ for kv in "$@"; do
     run) run_id="$val" ;;
     cwd) cwd="$val" ;;
     claudeSession) claude_session="$val" ;;
+    phase) phase="$val" ;;
+    outcome) outcome="$val" ;;
   esac
   kvs+=("$kv")
 done
+
+# Only the phases the SKILL defines may be logged; an improvised phase name is a
+# step the skill doesn't have, and it breaks usage-report.sh's per-step attribution.
+if [ "$event" = "phase" ]; then
+  case "$phase" in
+    plan-approved|planner-done|verify-failed|review-requested|review-settled) ;;
+    *) echo "ledger.sh: unknown phase '$phase' (allowed: plan-approved planner-done verify-failed review-requested review-settled)" >&2
+       exit 1 ;;
+  esac
+fi
+
+if [ "$event" = "run-end" ]; then
+  case "$outcome" in
+    pr-open|stopped|split) ;;
+    *) echo "ledger.sh: run-end requires outcome=<pr-open|stopped|split>, got '$outcome'" >&2
+       exit 1 ;;
+  esac
+fi
 
 if [ "$event" = "run-start" ]; then
   if [ -z "$issue" ] || [ "$issue" = "0" ]; then
@@ -68,9 +88,11 @@ expr='{ts:$ts}'
 i=0
 for kv in "${kvs[@]}"; do
   key="${kv%%=*}"; val="${kv#*=}"
-  # Values that parse as JSON (numbers, objects, booleans) keep their type;
-  # everything else is a string.
-  if jq -e . >/dev/null 2>&1 <<<"$val"; then
+  # Values that parse as JSON (numbers, objects, booleans, null) keep their type;
+  # everything else is a string. `jq -e 'true'` (not `jq -e .`) so a literal
+  # `null`/`false` counts as valid JSON — `jq -e .` exits 1 on those and used to
+  # store tokens=null as the string "null".
+  if jq -e 'true' >/dev/null 2>&1 <<<"$val"; then
     args+=(--arg "k$i" "$key" --argjson "v$i" "$val")
   else
     args+=(--arg "k$i" "$key" --arg "v$i" "$val")
