@@ -1,0 +1,21 @@
+{
+  "name": "update-skills",
+  "version": "0.1.0",
+  "description": "Update every subhan-skills plugin to the latest marketplace version in both Claude Code and Codex, via each CLI's native plugin commands.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["plugins", "marketplace", "update", "claude", "codex"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Update Skills",
+    "shortDescription": "Pull the newest subhan-skills plugin versions into Claude Code and Codex.",
+    "longDescription": "Wraps update-skills.sh: refreshes the subhan-skills marketplace in each CLI, updates each installed Claude plugin at its own scope, upgrades the Codex marketplace snapshot, and reports per-plugin version changes.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["Plugins", "Marketplace"],
+    "websiteURL": "https://github.com/subhan-io/skills"
+  }
+}
