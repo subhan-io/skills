@@ -1,7 +1,6 @@
 ---
 name: ship-issue
 description: Ship one GitHub issue or adhoc task to a finished PR — tiered planning, one fresh Codex session per chunk, a usage ledger per run.
-disable-model-invocation: true
 ---
 
 # Ship one issue
