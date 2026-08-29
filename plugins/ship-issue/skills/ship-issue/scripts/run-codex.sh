@@ -13,8 +13,10 @@
 # turns × context, so fresh-and-small beats warm-and-long: resume only for the one
 # immediate follow-up the SKILL allows.
 #
-# The session runs workspace-write with network on and reads CLAUDE.md as its project
-# doc. The model's final message lands in --out; a usage event (session id, duration,
+# The session runs with full access (danger-full-access) — the worktree's real git
+# dir, package caches, and the docker socket all live outside the cwd, and a
+# workspace-write sandbox burns turns rediscovering each one. It reads CLAUDE.md as
+# its project doc. The model's final message lands in --out; a usage event (session id, duration,
 # token totals from the rollout file) is appended to the ledger via ledger.sh; one
 # small JSON run record is printed for the orchestrator.
 set -uo pipefail
@@ -50,8 +52,7 @@ fi
 
 start_epoch=$(date +%s)
 
-codex_args=(--cd "$cd_dir" --sandbox workspace-write \
-  -c 'sandbox_workspace_write.network_access=true' \
+codex_args=(--cd "$cd_dir" --sandbox danger-full-access \
   -c 'project_doc_fallback_filenames=["CLAUDE.md"]' \
   --output-last-message "$out")
 

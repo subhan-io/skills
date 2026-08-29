@@ -125,11 +125,10 @@ chunks' summaries — and always append `anti-slop.md` (in this skill's director
 for a chunk touching anything a user sees, also append the `ui-evidence` skill's
 content, making screenshots part of the deliverable.
 
-Write the sandbox split into every prompt: Codex runs the checks that work inside
-its sandbox (typecheck, unit tests, lint) and reports their output; the full and
-integration suites, and the commit, are yours — the sandbox has no Docker and a
-read-only `.git`, so a prompt that asks for a full-test gate or a commit SHA buys
-turns of Codex rediscovering that. Then:
+Write the ownership split into every prompt: Codex runs with full access, so it
+runs every check that gates its chunk — typecheck, unit tests, lint, docker-backed
+suites — and reports their output; the commit and the ledger stay yours, so tell
+it to leave all changes unstaged for you to commit. Then:
 
 ```bash
 scripts/run-codex.sh --role chunk --issue <n> --index <i> --run <runId> \
