@@ -12,7 +12,13 @@
       "source": "./plugins/ship-issue-omp",
       "description": "Ship one GitHub issue or adhoc task to a reviewed PR with native OMP agents, tools, approval gates, and durable run state.",
       "category": "development",
-      "keywords": ["omp", "github", "issues", "pull-requests", "agents"]
+      "keywords": [
+        "omp",
+        "github",
+        "issues",
+        "pull-requests",
+        "agents"
+      ]
     },
     {
       "name": "ship-issue",
@@ -43,6 +49,17 @@
       "source": "./plugins/pr-media-upload",
       "description": "Publish PR screenshots, video, GIFs, or HTML explainers.",
       "category": "productivity"
+    },
+    {
+      "name": "update-skills",
+      "source": "./plugins/update-skills",
+      "description": "Update every subhan-skills plugin to the latest marketplace version in Claude Code and Codex.",
+      "category": "productivity",
+      "keywords": [
+        "plugins",
+        "marketplace",
+        "update"
+      ]
     }
   ]
 }

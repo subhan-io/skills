@@ -53,6 +53,15 @@
       "description": "Upload a screenshot, GIF or screen recording to a public S3 bucket and get a permanent URL to embed in a GitHub PR description, issue or comment.",
       "author": { "name": "Subhan Mahmood" },
       "keywords": ["github", "screenshots", "s3", "pull-requests"]
+    },
+    {
+      "name": "update-skills",
+      "source": "./",
+      "skills": ["./plugins/update-skills/skills/update-skills"],
+      "strict": false,
+      "description": "Update every subhan-skills plugin to the latest marketplace version in both Claude Code and Codex, via each CLI's native plugin commands.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["plugins", "marketplace", "update", "claude", "codex"]
     }
   ]
 }
