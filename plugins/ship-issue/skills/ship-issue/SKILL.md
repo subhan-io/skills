@@ -71,6 +71,12 @@ None of these writes are skippable:
 
 One issue per run. If the task bundles several, ask which one to ship first.
 
+If the task may change anything a user sees, load the complete `ui-evidence`
+skill now through the harness's skill mechanism. A reference to its name is not
+the contract. If the harness cannot invoke it, read its installed `SKILL.md` in
+full; if neither route is available, stop before the criteria gate. Keep its
+capture routes and completion test live for the rest of the run.
+
 ## 2. Confirm criteria and tier — gate
 
 Draft the acceptance criteria as a short checklist, pick the tier from the table,
@@ -121,9 +127,12 @@ approval, log `event=phase phase=plan-approved`.
 
 For each chunk, in order: draft the prompt with the `codex:gpt-5-4-prompting`
 skill — the chunk's spec, its criteria, its verify command, the paths of previous
-chunks' summaries — and always append `anti-slop.md` (in this skill's directory);
-for a chunk touching anything a user sees, also append the `ui-evidence` skill's
-content, making screenshots part of the deliverable.
+chunks' summaries — and always append `anti-slop.md` (in this skill's directory).
+For a chunk touching anything a user sees, paste the complete loaded
+`ui-evidence` content into the prompt under a `UI evidence contract` heading and
+make published screenshots part of the deliverable. Do not launch a UI chunk
+whose prompt merely names or links the skill. A worker's evidence report is an
+input to the final gate; the orchestrator still owns that gate.
 
 Write the ownership split into every prompt: Codex runs with full access, so it
 runs every check that gates its chunk — typecheck, unit tests, lint, docker-backed
@@ -141,14 +150,37 @@ send the failure output back once with `--resume <sessionId>`; if it is still re
 after that, run one fresh session with the failure evidence inline; still red →
 stop and report. A chunk is done only when its verify command passes in your shell.
 
-## 6. Full test pass, then the PR
+## 6. Full test pass, evidence gate, then the PR
 
 Run the repo's full test suite; failures go back to Codex as fresh `--role fix`
-sessions until green. Then branch, commit, push, `gh pr create`. Body: the issue
-link, the confirmed criteria as a checklist, the chunk summary, and — whenever any
-part of the change is user-visible — the published shots per `ui-evidence`
-(including any `un-capturable:` reasons). The PR is not open until every
-user-visible change is pictured or carries its reason.
+sessions until green. Create the branch and commit the product changes, then
+record `git rev-parse HEAD`; UI evidence must render that commit. A temporary
+uncommitted harness may sit on top of it only as allowed by `ui-evidence`, and
+must be removed before push.
+
+For every user-visible change, reload the complete `ui-evidence` skill immediately
+before capture and load `pr-media-upload`. The orchestrator executes the capture
+itself even when a chunk returned candidate shots. Its evidence report must name:
+
+- the captured HEAD;
+- the real-route result, including the preview command's reported database mode
+  and the observed application-auth result;
+- the sanctioned scratch-data route result or its precise unavailability;
+- the production-shell fixture-harness result or why it would render inaccurate
+  pixels;
+- the published URLs, or an `un-capturable:` conclusion supported by all three
+  route results.
+
+Resolve contradictions from command and browser output before completing the
+report; a conversational guess about the database is not evidence. Component,
+integration and end-to-end tests support behavioral claims but never substitute
+for visible pixels. An `un-capturable:` conclusion that omits a route is an
+incomplete gate, so continue capture or stop the run.
+
+After the evidence gate, verify that cleanup returned the tree to the recorded
+HEAD, then push and run `gh pr create`. The body contains the issue link, confirmed
+criteria checklist, chunk summary and the evidence report. The PR is not open
+until this gate is complete.
 
 ## 7. Review — one round, two max
 

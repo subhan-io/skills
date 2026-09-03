@@ -9,10 +9,11 @@ description: >-
 
 # UI evidence
 
-A change that touches anything a user sees ships with published screenshots. If the
-state genuinely cannot be produced, the report says **un-capturable:** and why — the
-shots never quietly go missing, and that reason travels into the PR body so the
-reviewer never guesses whether shots were skipped or impossible.
+A change that touches anything a user sees ships with published screenshots. The
+completion signal is visible pixels from the reviewed code, not a passing component
+test or a plausible explanation. `un-capturable:` is the exceptional outcome after
+the route matrix below is exhausted; it is not a shortcut around authentication or
+fixture setup.
 
 When an implementer agent (not you) does the capture, include this file's content in
 its prompt.
@@ -28,6 +29,10 @@ Before choosing it, separate the access layers:
 - A preview banner such as `NO AUTH` usually means no network or proxy gate. It does
   **not** prove the application has no login. Drive the browser once and record whether
   the app itself redirects to sign-in.
+- Treat the preview/server command's output as the authority for its database mode.
+  When a later statement conflicts with that output, reconcile the conflict instead
+  of changing the evidence conclusion. A failed login alone proves neither which
+  database is attached nor that the account is absent.
 - Never create accounts or fixtures in a read-only dev, production or PR database.
   Use a repository-sanctioned writable scratch database when the real end-to-end state
   is required and the app already documents how to provision, migrate, seed and delete
@@ -53,6 +58,23 @@ An application-auth redirect or a read-only PR database is not, by itself, an
 without lying about the pixels. Declare `un-capturable:` only after the existing
 route, sanctioned scratch-data route and fixture-harness route are each unavailable
 or inaccurate; name every route tried and the exact blocker.
+
+## Evidence report — completion gate
+
+Return a report with all of these fields; a parent workflow must reject a report
+that omits one:
+
+```text
+reviewed HEAD: <sha>
+real route: <attempt and observed result, including DB mode and app auth>
+scratch route: <attempt/result, or exact reason unavailable>
+fixture harness: <attempt/result, or exact reason inaccurate>
+published: <permanent URLs>
+```
+
+When no route can truthfully render the state, replace `published:` with
+`un-capturable:` and keep the three route entries. Tests may accompany the report
+as behavioral evidence, but cannot occupy `published:` or justify skipping a route.
 
 ## Gotchas that hold on every route
 
