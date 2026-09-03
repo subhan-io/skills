@@ -152,9 +152,14 @@ scripts/stack.sh restack --repo <repo> --base <base-branch>
 ```
 
 It rebases each tracked branch onto its new parent bottom-up, force-pushes with
-a lease, and retargets each PR — a branch whose parent was merged and deleted
-gets reparented onto the base branch. Run it immediately after any merge lands,
-attended or AFK, before picking again.
+a lease, and retargets each PR — a branch whose parent has merged gets reparented
+onto the base branch, whether or not the merge deleted it. Run it immediately
+after any merge lands, attended or AFK, before picking again.
+
+Each rebase runs inside the worktree that holds the branch, since git will not
+switch to a branch another worktree has checked out. A dirty worktree therefore
+stops the run rather than being rewritten underneath whoever is working in it —
+commit or set those changes aside first.
 
 Two consequences to carry into the report:
 
@@ -166,7 +171,9 @@ Two consequences to carry into the report:
 
 When the rebase conflicts, the script stops and leaves the branch untouched.
 Resolve it by hand, then re-run — never let the epic continue on a half-restacked
-stack.
+stack. A failed push is undone the same way: the branch is rolled back to where
+it started, so a re-run redoes the whole step rather than believing work that
+never reached the remote.
 
 ## 5. Continue or report
 

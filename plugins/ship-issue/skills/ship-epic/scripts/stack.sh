@@ -34,8 +34,35 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$repo" ] || { echo "stack.sh: --repo is required" >&2; exit 2; }
 git() { command git -C "$repo" "$@"; }
+gitw() { command git -C "$1" "${@:2}"; }
 ghx() { ( cd "$repo" && command gh "$@" ); }
 say() { echo "stack.sh: $*" >&2; }
+
+# The worktree that has a branch checked out, if any. `git rebase` switches to
+# the branch internally, and git refuses that when another worktree holds it —
+# ship-epic gives every picked branch its own worktree, so this is the normal
+# case rather than the exception.
+worktree_for() {
+  git worktree list --porcelain \
+    | awk -v ref="refs/heads/$1" '/^worktree /{wt=substr($0,10)} $0 == "branch " ref {print wt; exit}'
+}
+
+# A branch is done when its remote branch is gone or when its pull request has
+# merged. Both spellings occur: an AFK run merges with --delete-branch, which
+# removes the branch on origin only, while an attended merge is the human's and
+# they may leave the branch in place. Treating absence alone as "merged" would
+# leave a dependent PR targeting a merged branch, so merging it would update
+# that dead branch instead of shipping to the base.
+#
+# A branch that was never pushed has no `branch.<b>.remote`, which is what
+# separates "not yet opened" from "merged and gone".
+branch_is_merged() {
+  if git config --get "branch.$1.remote" >/dev/null 2>&1 \
+     && ! git rev-parse --verify --quiet "origin/$1" >/dev/null; then
+    return 0
+  fi
+  [ -n "$(ghx pr list --head "$1" --state merged --json number -q '.[0].number' 2>/dev/null)" ]
+}
 
 # git stores config variable names lower-cased (the branch subsection keeps its
 # case, the variable does not), so this pattern must be lower-case to match at
@@ -90,15 +117,11 @@ case "$cmd" in
     while [ -n "${remaining// /}" ] && [ "$progress" = 1 ]; do
       progress=0; still=""
       for b in $remaining; do
-        # Drop a branch that is already merged away. `git branch -d` clears its
-        # config, but an AFK run merges with --delete-branch, which removes the
-        # branch on origin only — the local ref and this tracking survive, and
-        # rebasing on them would force-push a merged branch back into existence.
-        # A branch that was never pushed has no `branch.<b>.remote`, which is
-        # what separates "not yet opened" from "merged and gone".
-        if ! git rev-parse --verify --quiet "$b" >/dev/null \
-           || { git config --get "branch.$b.remote" >/dev/null 2>&1 \
-                && ! git rev-parse --verify --quiet "origin/$b" >/dev/null; }; then
+        # Drop a branch that is already merged. `git branch -d` clears its
+        # config, but merging does not — the local ref and this tracking
+        # survive, and rebasing on them would force-push merged work back into
+        # existence.
+        if ! git rev-parse --verify --quiet "$b" >/dev/null || branch_is_merged "$b"; then
           say "$b is merged or gone — untracking it"
           git config --unset "branch.$b.shipEpicParent" || true
           git config --unset "branch.$b.shipEpicBase" || true
@@ -115,10 +138,10 @@ case "$cmd" in
 
         p=$(git config --get "branch.$b.shipEpicParent")
 
-        # A parent that no longer exists on the remote was squash-merged and
-        # deleted. Everything stacked on it now belongs directly on the base.
-        if ! git rev-parse --verify --quiet "origin/$p" >/dev/null && [ "$p" != "$base" ]; then
-          say "$b: parent $p is merged and gone — reparenting onto $base"
+        # A merged parent is out of the stack, so everything above it belongs
+        # directly on the base now.
+        if [ "$p" != "$base" ] && branch_is_merged "$p"; then
+          say "$b: parent $p is merged — reparenting onto $base"
           p="$base"; git config "branch.$b.shipEpicParent" "$base"
         fi
         case "$settled" in *" $p "*) ;; *) still="$still $b"; continue ;; esac
@@ -130,15 +153,37 @@ case "$cmd" in
         if [ "$new_parent_tip" = "$old_base" ]; then
           say "$b is already on top of $p"
         else
+          # Rebase where the branch actually lives, or git refuses to switch to
+          # it. A worktree mid-edit must not be rewritten under the person
+          # working in it, so an unclean one stops the run instead.
+          wt=$(worktree_for "$b")
+          rebase_in="${wt:-$repo}"
+          if [ -n "$wt" ] && [ -n "$(gitw "$wt" status --porcelain)" ]; then
+            say "$b: its worktree $wt is dirty — commit or set the changes aside first"
+            exit 1
+          fi
+
           say "$b: rebasing onto $p"
-          if ! git rebase --onto "$new_parent_tip" "$old_base" "$b"; then
-            git rebase --abort || true
+          pre_rebase=$(git rev-parse "$b")
+          if ! gitw "$rebase_in" rebase --onto "$new_parent_tip" "$old_base" "$b"; then
+            gitw "$rebase_in" rebase --abort || true
             git checkout "$started_on" >/dev/null 2>&1 || true
             say "$b conflicts with $p — resolve it by hand, then re-run restack"
             exit 1
           fi
+
+          # Record the new fork point only once the push it describes has
+          # landed, and undo the local rebase if it has not. Recording first
+          # leaves the next run seeing new_parent_tip == old_base, so it skips
+          # both the rebase and the push and reports success while the remote
+          # still holds the stale commits.
+          if ! git push --force-with-lease origin "$b"; then
+            gitw "$rebase_in" reset --hard "$pre_rebase" >/dev/null
+            git checkout "$started_on" >/dev/null 2>&1 || true
+            say "$b: push failed — rolled the branch back to ${pre_rebase:0:8}, re-run restack"
+            exit 1
+          fi
           git config "branch.$b.shipEpicBase" "$new_parent_tip"
-          git push --force-with-lease origin "$b"
         fi
 
         pr=$(ghx pr list --head "$b" --state open --json number -q '.[0].number' 2>/dev/null || true)
