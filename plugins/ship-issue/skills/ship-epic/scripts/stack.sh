@@ -5,6 +5,10 @@
 #   stack.sh list    --repo R                           # show the recorded stack
 #   stack.sh restack --repo R [--base master]           # rebase + retarget after a merge
 #
+# restack is silent on stdout except on a conflict, when it prints one line —
+#   conflict branch=<b> parent=<p> onto=<sha> from=<sha> worktree=<dir>
+# — and exits 1 with the branch untouched, for ship-epic to hand to a resolver.
+#
 # A stacked branch starts from its blocker's head, not from master, so a dependent
 # sub-issue can be worked before its blocker merges. Its pull request opens with
 # `--base <blocker-branch>`, so the diff shows only that sub-issue's own work.
@@ -165,10 +169,14 @@ case "$cmd" in
 
           say "$b: rebasing onto $p"
           pre_rebase=$(git rev-parse "$b")
-          if ! gitw "$rebase_in" rebase --onto "$new_parent_tip" "$old_base" "$b"; then
+          # Rebase chatter goes to stderr so stdout stays reserved for the conflict line.
+          if ! gitw "$rebase_in" rebase --onto "$new_parent_tip" "$old_base" "$b" >&2; then
             gitw "$rebase_in" rebase --abort || true
             git checkout "$started_on" >/dev/null 2>&1 || true
-            say "$b conflicts with $p — resolve it by hand, then re-run restack"
+            say "$b conflicts with $p — route it to a restack session, then re-run restack"
+            # The one stdout line restack ever prints: everything a resolver needs
+            # to redo this exact rebase (SKILL.md step 4), so nothing is guessed.
+            echo "conflict branch=$b parent=$p onto=$new_parent_tip from=$old_base worktree=$rebase_in"
             exit 1
           fi
 
