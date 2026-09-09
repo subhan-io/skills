@@ -97,15 +97,21 @@ pr-media-upload plugins for their corresponding branches.
 Confirms acceptance criteria and a planning tier, plans inline
 (dispatching an Opus planner only for deep work), proposes an issue split past two chunks,
 implements each chunk in a fresh Codex session via `scripts/run-codex.sh`, and runs one Codex
-review round. Every run and every Codex session appends token usage to
-`~/.local/state/ship-issue/ledger.jsonl`; `scripts/usage-report.sh` reports cost per run.
+review round. Every Codex session ends with a `handoff.md` message whose *Remaining plan
+impact* line lets a chunk adjust or void the plan behind it; the orchestrator keeps a rewritten
+`run-state.md` scratchpad under `~/.local/state/ship-issue/issue-<n>/` and folds each run's
+repo gotchas into `<repo>/.claude/ship-issue/repo-notes.md` for the next one. Every run and
+every Codex session appends token usage to `~/.local/state/ship-issue/ledger.jsonl`;
+`scripts/usage-report.sh` reports cost and friction per run.
 The skill carries its own Codex-harness adaptations, so the native Codex plugin runs the same
 workflow. Uses the plan-explainer, ui-evidence, and codex-review plugins — install those
 alongside it.
 
 The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues: each
 invocation is one tick that surveys the epic, ships the next unblocked sub-issue through
-`/ship-issue`, and reports. The human merges between ticks. `/ship-epic afk` instead
+`/ship-issue` with the epic's build order and contracts as context, restacks dependent PRs
+after a merge (routing rebase conflicts to a Codex session), and rewrites a status block in
+the epic body. The human merges between ticks. `/ship-epic afk` instead
 dispatches each pick as its own t3code sidebar thread (via the local t3 server's HTTP
 dispatch API) running `/ship-issue afk` — unattended light/standard runs that self-merge
 on green — and drains the epic in one invocation.

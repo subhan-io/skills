@@ -27,6 +27,22 @@ before stopping.
 
 ## 1. Survey
 
+The epic body is the tick's memory. Its build order lives there, and so does a
+status block between `<!-- ship-epic:status -->` markers that step 5 rewrites whole
+at the end of every tick. Read the block first: it is the last tick's table, and
+the survey below refreshes it rather than rebuilding it.
+
+Start the tick's ledger run and keep the id: it stamps the tick's own Codex
+sessions (step 4) and the run-end in step 5. `<ship-issue>` below is the sibling
+`ship-issue` skill directory, beside this one.
+
+```bash
+tick=$(<ship-issue>/scripts/ledger.sh event=run-start issue=epic-<n> tier=epic)
+```
+
+No `cwd` on purpose: the sub-issue runs inside the tick already account for this
+session's Claude cost, and a cwd would count it twice.
+
 Read the epic (`gh issue view <n>`) and its native sub-issues:
 
 ```bash
@@ -107,6 +123,17 @@ repository asset, not scaffolding for this skill. Rows the epic needs beyond
 that baseline go in an overlay the first sub-issue adds and later sub-issues
 extend; that overlay is what makes a backfill testable.
 
+**Epic context.** Every run under this epic gets the same block, built once per
+tick and handed to `ship-issue` — in your own context for an attended run, in the
+prompt file for an AFK one: the epic's goal paragraph, the build order, its
+`## Contracts` section, and the refreshed status table. `## Contracts` holds the
+decisions sub-issues must agree on: the interfaces they meet at, the dependency
+policy (what is written in-repo, which libraries stay out), names that must match
+across sub-issues. When the body has none and the epic shares surface across
+sub-issues, draft it from the epic and the shipped work and put it to the human
+together with the build order, then edit it into the body. A sub-issue's run appends
+to it when its plan settles a contract a later sub-issue depends on.
+
 Attended (default): run the `ship-issue` skill on the picked sub-issue, end to
 end, in this session. Its criteria gate stays live — the epic body's decisions
 are context for the criteria draft, not a substitute for the human's
@@ -132,8 +159,10 @@ where an Agent-tool subagent shows only title and token count:
   run's outcome is `merged`, settle its thread —
   `scripts/t3-dispatch.sh settle <threadId>` — so the sidebar shows only runs
   that still need the human. Any other outcome leaves the thread unsettled.
-- Independent picks may run concurrently. A pick that stacks on an in-flight
-  blocker may also start, but it must not merge before its blocker: an AFK run
+- Independent picks may run concurrently, **two in flight at most** — a run is in
+  flight from dispatch until its issue comment lands. This box also builds and
+  serves; a third concurrent run starves all three. A pick that stacks on an
+  in-flight blocker may also start, but it must not merge before its blocker: an AFK run
   merges its own PR, and merging a stacked PR into its blocker's branch buries
   the work instead of shipping it. Tell such a run to hand over unmerged, and
   merge it yourself in a later tick once the restack has retargeted it onto the
@@ -169,11 +198,35 @@ Two consequences to carry into the report:
 - A `codex-review` round that ran before a restack is stale. A PR whose content
   the rebase changed needs its round again; a clean replay does not.
 
-When the rebase conflicts, the script stops and leaves the branch untouched.
-Resolve it by hand, then re-run — never let the epic continue on a half-restacked
-stack. A failed push is undone the same way: the branch is rolled back to where
-it started, so a re-run redoes the whole step rather than believing work that
-never reached the remote.
+When the rebase conflicts, the script stops, leaves the branch untouched, and
+prints one line on stdout:
+
+```text
+conflict branch=<b> parent=<p> onto=<sha> from=<sha> worktree=<dir>
+```
+
+Route it to a Codex restack session; a human resolving merge hunks is the tick
+stalling. Write a prompt from those values: in `<worktree>`, run
+`git rebase --onto <onto> <from> <b>`, resolve each hunk preserving the intent of
+both sides (the merged PR's diff and the epic's `## Contracts` say what the parent
+side meant), run the sub-issue's verify command, then
+`git push --force-with-lease origin <b>`. Append `anti-slop.md` and `handoff.md`
+from the `ship-issue` skill directory, then:
+
+```bash
+<ship-issue>/scripts/run-codex.sh --role restack --issue <epic> --run "$tick" \
+  --prompt-file <f> --out <f.last.md> --cd <worktree>
+```
+
+Read the handoff. A pushed, verified rebase is followed by
+`scripts/stack.sh track --repo <repo> --branch <b> --parent <p>`, which re-records
+the fork point from the new merge base, and then `restack` again for the rest of
+the stack. A handoff that reports both sides changed one contract incompatibly is
+an escalation: leave the branch where the script left it and take it to the human.
+Never let the epic continue on a half-restacked stack, and never force-push a guess
+to make it green. A failed push is undone by the script itself: the branch is
+rolled back to where it started, so a re-run redoes the whole step rather than
+believing work that never reached the remote.
 
 ## 5. Continue or report
 
@@ -185,8 +238,21 @@ AFK: runs self-merge, so keep draining — after each run's report, restack (ste
 4), refresh the survey, and dispatch the next pick, until the epic has no
 eligible open sub-issue left.
 
-End every tick with the status table from step 1, refreshed: what shipped or
-merged, what is parked for an attended tick, what waits on the human, and what
-the next tick will pick up. Add the stack as `scripts/stack.sh list` prints it,
-so the human can see what a merge will rebase before they merge it, and name the
-epic database and whether this tick migrated it.
+End every tick by rewriting the epic's status block: the table from step 1,
+refreshed — what shipped or merged, what is parked for an attended tick, what
+waits on the human, what the next tick will pick up — then the stack as
+`scripts/stack.sh list` prints it, so the human can see what a merge will rebase
+before they merge it, and the epic database with whether this tick migrated it.
+Write it to a file and replace the block in the body:
+
+```bash
+scripts/epic-status.sh --repo <repo> --epic <n> --file <status.md>
+```
+
+It replaces everything between the markers and appends the block on first use, so
+the body always holds one current table and never a trail of them. Print the same
+table in chat, then close the tick's ledger run:
+
+```bash
+<ship-issue>/scripts/ledger.sh event=run-end run="$tick" issue=epic-<n> outcome=tick
+```

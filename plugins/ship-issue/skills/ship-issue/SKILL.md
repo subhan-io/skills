@@ -35,6 +35,8 @@ the run merges its own PR. The rules that change:
   instead of asking. **Step 3**: an open question with no answer in the issue is an
   eligibility failure, not a guess. **Gate 2**: self-approve the plan; a plan past
   2 chunks still becomes a split proposal, reported back, never executed.
+  **Step 5**: a handoff that says `replan` stops the run — fail closed, report what
+  the chunk found.
 - **Merge**: after the review round settles and the PR is green, merge it —
   `gh pr merge <n> --squash --delete-branch` — and log `run-end outcome=merged`.
   Anything short of green hands over as usual, unmerged.
@@ -64,12 +66,55 @@ None of these writes are skippable:
   pr=<n> chunks=<n> reviewRounds=<n> findingsValid=<n> findingsInvalid=<n>
   verifyRetries=<n>` — when you hand over or stop.
 
+## The run directory
+
+Every run keeps its working files in `~/.local/state/ship-issue/issue-<n>/` (the
+adhoc slug in place of `<n>`): every Codex prompt and `--out` file, and
+`run-state.md`. Outside the repo, so nothing in it can reach the diff; outside
+`/tmp`, so it survives a reboot.
+
+**`run-state.md` is the run's scratchpad. Rewrite it whole after every step**; an
+appended log goes stale while a rewritten page stays true. A resumed session, and
+every later Codex session, reads it as the truth about where the run is. It holds,
+in this order:
+
+- run id, issue, tier, the confirmed criteria, the settled decisions, and the epic
+  context block when there is one;
+- the current step and, during step 5, the next chunk;
+- the branch, the last verified HEAD, the PR number, and the review round;
+- **Repo now**: the tree as it stands after the last verified session — interfaces
+  introduced, helpers to reuse, files shaped differently from the plan — merged from
+  each handoff's *For the next session*. Fold new facts in and drop superseded ones,
+  so the section describes the tree, not its history.
+
+A session's handoff is its `--out` file. A Codex session gets the path of
+`run-state.md` and the path of the previous session's handoff, and nothing older: the scratchpad already carries the earlier
+sessions' facts, so an older handoff adds cost without adding truth.
+
 ## 1. Read the task
 
 - A GitHub issue URL/number: `gh issue view <n> --comments`.
 - Otherwise treat the message as an adhoc task; restate it in one paragraph.
 
 One issue per run. If the task bundles several, ask which one to ship first.
+
+**Epic context.** An issue with a parent is a sub-issue of an epic:
+
+```bash
+gh api graphql -f query='query{repository(owner:"<o>",name:"<r>"){issue(number:<n>){
+  parent{number title}}}}'
+```
+
+Read the parent too. Its goal, build order, `## Contracts` section, and the states of
+its other sub-issues are the epic context: the plan must compose with the sub-issues
+after this one, and every Codex prompt carries the block under an `Epic context`
+heading. When `ship-epic` invoked this run it hands you the block; use it as given.
+An epic without `## Contracts` gets one the moment this run settles an interface a
+later sub-issue depends on: append it to the parent body.
+
+**Repo notes.** If `<repo>/.claude/ship-issue/repo-notes.md` exists, read it and paste
+it into every Codex prompt under a `Repo notes` heading. It is what earlier runs
+learned about this repository the hard way (step 6 is where a run adds to it).
 
 If the task may change anything a user sees, load the complete `ui-evidence`
 skill now through the harness's skill mechanism. A reference to its name is not
@@ -126,8 +171,12 @@ approval, log `event=phase phase=plan-approved`.
 ## 5. Implement — one fresh Codex session per chunk
 
 For each chunk, in order: draft the prompt with the `codex:gpt-5-4-prompting`
-skill — the chunk's spec, its criteria, its verify command, the paths of previous
-chunks' summaries — and always append `anti-slop.md` (in this skill's directory).
+skill — the chunk's spec, its criteria, its verify command, the epic context and
+repo notes when they exist, the path of `run-state.md` and of the previous session's
+handoff — and always append `anti-slop.md` then `handoff.md` (both in this skill's
+directory). `handoff.md` fixes the shape of the session's final message; the
+orchestrator reads that message, so a prompt without it produces a summary you
+cannot act on.
 For a chunk touching anything a user sees, paste the complete loaded
 `ui-evidence` content into the prompt under a `UI evidence contract` heading and
 make published screenshots part of the deliverable. Do not launch a UI chunk
@@ -149,6 +198,20 @@ command yourself. On failure, log `event=phase phase=verify-failed chunk=<i>` an
 send the failure output back once with `--resume <sessionId>`; if it is still red
 after that, run one fresh session with the failure evidence inline; still red →
 stop and report. A chunk is done only when its verify command passes in your shell.
+
+A green chunk still steers the plan. Read its handoff's *Remaining plan impact*
+before anything else runs:
+
+- `none` → rewrite `run-state.md`; start the next chunk.
+- `adjust` → fold the change into *Repo now* and into the next chunk's spec, and
+  say so in `run-state.md`. Scope and criteria stand, so no gate reopens.
+- `replan` → the remaining chunks are void. Re-plan them from the tree as it is
+  (deep tier: re-dispatch the Plan agent with the handoff and `run-state.md`). A new
+  plan that keeps the approved scope and criteria continues once it is in
+  `run-state.md`; one that changes either is a new gate 2 and goes to the human.
+
+Planning does not end at gate 2: each handoff is the planner's next input, and a
+plan that never moves after the first chunk was never checked against the code.
 
 ## 6. Full test pass, evidence gate, then the PR
 
@@ -177,6 +240,13 @@ integration and end-to-end tests support behavioral claims but never substitute
 for visible pixels. An `un-capturable:` conclusion that omits a route is an
 incomplete gate, so continue capture or stop the run.
 
+Before the PR, harvest the handoffs' *Repo gotchas*. A fact a future run should
+know goes into `<repo>/.claude/ship-issue/repo-notes.md`, folded into the section
+it belongs to — the file is a reference, not a log: merge, and delete an entry this
+run proved stale. Create the file with the first fact. Commit that change on the
+branch by itself and name it in the PR body; a gotcha that surfaces later in a
+review-fix session rides that round's commit.
+
 After the evidence gate, verify that cleanup returned the tree to the recorded
 HEAD, then push and run `gh pr create`. The body contains the issue link, confirmed
 criteria checklist, chunk summary and the evidence report. The PR is not open
@@ -204,8 +274,12 @@ stop and hand over what is outstanding.
 ## 8. Hand over
 
 Report to the human: the PR URL, the criteria checklist with each item's status,
-test status, review outcomes, and anything open. Log `run-end`. Never merge — the
-human does.
+test status, review outcomes, and anything open. Log `run-end`, then run
+`scripts/usage-report.sh --run <id>` and add its friction line to the report: Codex
+sessions that exited non-zero, verify failures, review rounds, and findings. A
+number that recurs across runs is a defect in a prompt or a script, not bad luck —
+name it when you see it, with the ledger row that shows it. Never merge — the human
+does.
 
 ## Under the Codex harness
 

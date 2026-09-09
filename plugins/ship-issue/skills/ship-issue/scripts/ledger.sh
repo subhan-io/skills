@@ -5,6 +5,8 @@
 #   ledger.sh event=phase run=<id> issue=397 phase=plan-approved
 #   ledger.sh event=run-end run=<id> issue=397 outcome=pr-open pr=443 chunks=2 \
 #             reviewRounds=1 findingsValid=2 findingsInvalid=1 verifyRetries=0
+#   ledger.sh event=run-start issue=epic-525 tier=epic        # a ship-epic tick
+#   ledger.sh event=run-end run=<id> issue=epic-525 outcome=tick
 #
 # Every key=value pair becomes a JSON field; a UTC timestamp is added as `ts`.
 # Values that parse as JSON (numbers, objects, booleans) keep their type.
@@ -55,10 +57,12 @@ if [ "$event" = "phase" ]; then
   esac
 fi
 
+# `tick` closes a ship-epic tick's run (issue=epic-<n>, tier=epic): the run that
+# owns the tick's own Codex sessions, such as a restack.
 if [ "$event" = "run-end" ]; then
   case "$outcome" in
-    pr-open|merged|stopped|split) ;;
-    *) echo "ledger.sh: run-end requires outcome=<pr-open|merged|stopped|split>, got '$outcome'" >&2
+    pr-open|merged|stopped|split|tick) ;;
+    *) echo "ledger.sh: run-end requires outcome=<pr-open|merged|stopped|split|tick>, got '$outcome'" >&2
        exit 1 ;;
   esac
 fi

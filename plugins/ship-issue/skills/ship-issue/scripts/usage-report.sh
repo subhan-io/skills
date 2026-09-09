@@ -2,7 +2,11 @@
 # usage-report.sh — what each ship-issue run cost, joined from the ledger and the
 # session logs both harnesses leave on disk.
 #
-#   usage-report.sh [--since 2026-08-18] [--json]
+#   usage-report.sh [--since 2026-08-18] [--run <id>] [--json]
+#
+# --run narrows the report to one run, ignoring --since: the hand-over step prints
+# that run's friction (Codex sessions that exited non-zero, verify failures,
+# review rounds, findings) beside its cost.
 #
 # Per run (a run-start event, closed by its run-end):
 #   - Events join by the run id stamped at run-start when present; older ledger
@@ -24,9 +28,11 @@ set -euo pipefail
 LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
 SINCE="$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
 AS_JSON=false
+RUN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --since) SINCE="$2T00:00:00Z"; shift 2 ;;
+    --run) RUN="$2"; SINCE="1970-01-01T00:00:00Z"; shift 2 ;;
     --json) AS_JSON=true; shift ;;
     *) echo "usage-report.sh: unknown argument $1" >&2; exit 1 ;;
   esac
@@ -65,6 +71,8 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
          phases: ([$ev[] | select(.event == "phase") | select(belongs($s; $e))
                          | {phase, ts, round: (.round // null), chunk: (.chunk // null)}]),
          errors: ([$cx[] | select(.exitCode != 0) | {role, ts, exitCode, error: (.error // "")}]),
+         codexFailures: ([$cx[] | select(.exitCode != 0)] | length),
+         verifyFailed: ([$ev[] | select(.event == "phase" and .phase == "verify-failed") | select(belongs($s; $e))] | length),
          codex: ($sess
                  | {sessions: length,
                     roles: (map(.role) | group_by(.) | map({(.[0]): length}) | add // {}),
@@ -74,6 +82,10 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
                                      else ((.input_tokens // 0) - (.cached_input_tokens // 0) + (.output_tokens // 0)) end)
                                | add // 0)})})
 ' "$LEDGER")"
+if [ -n "$RUN" ]; then
+  runs="$(jq --arg r "$RUN" 'map(select(.run == $r))' <<<"$runs")"
+  [ "$(jq 'length' <<<"$runs")" -gt 0 ] || { echo "no run $RUN in $LEDGER" >&2; exit 1; }
+fi
 
 report="[]"
 n="$(jq 'length' <<<"$runs")"
@@ -118,9 +130,11 @@ fi
 echo "ship-issue runs since $SINCE  (cl-join: session = exact transcript, window = cwd+time fallback, may double count overlaps)"
 jq -r '
   def m: tostring | if (.|length) > 6 then (.[0:-6] + "." + .[-6:-5] + "M") else . end;
-  (["issue","tier","start","min","outcome","chk","rr","cdx-sess","cdx-total","cdx-uncached","cl-cread","cl-cwrite","cl-out","cl-join"] | @tsv),
+  (["issue","tier","start","min","outcome","chk","rr","vfail","cdx-fail","find-ok/bad","cdx-sess","cdx-total","cdx-uncached","cl-cread","cl-cwrite","cl-out","cl-join"] | @tsv),
   (.[] | [.issue, .tier, (.start[0:16] + " "), .durationMin, .outcome,
           (.chunks // "-"), (.reviewRounds // "-"),
+          .verifyFailed, .codexFailures,
+          ((.findingsValid // "-"|tostring) + "/" + (.findingsInvalid // "-"|tostring)),
           .codex.sessions, (.codex.total|m), (.codex.uncached|m),
           (.claude.cache_read|m), (.claude.cache_write|m), (.claude.out|m), .claude.join] | @tsv)
 ' <<<"$report" | if command -v column >/dev/null 2>&1; then column -t -s $'\t'; else awk -F'\t' '{for (i=1;i<=NF;i++) printf "%-16s", $i; print ""}'; fi
