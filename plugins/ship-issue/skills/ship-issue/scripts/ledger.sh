@@ -20,6 +20,9 @@
 #     automatically from the newest transcript under the cwd's project dir, so
 #     usage-report.sh can sum exactly this session instead of a time window.
 #     Pass claudeSession=<file.jsonl> explicitly to override.
+#   - `model` (the orchestrator's model, from that transcript's latest assistant
+#     message) is recorded beside it, so a run on the wrong model is visible in
+#     the ledger row itself, not only in usage-report.sh.
 #
 # The ledger is machine-central (one file across all repos and sessions) so a later
 # session can audit cost per run: see usage-report.sh.
@@ -83,7 +86,11 @@ if [ "$event" = "run-start" ]; then
   if [ -z "$claude_session" ] && [ -n "$cwd" ]; then
     proj_dir="$HOME/.claude/projects/$(echo "$cwd" | sed 's|[/.]|-|g')"
     newest="$(ls -t "$proj_dir"/*.jsonl 2>/dev/null | head -1 || true)"
-    [ -n "$newest" ] && kvs+=("claudeSession=$(basename "$newest")")
+    if [ -n "$newest" ]; then
+      kvs+=("claudeSession=$(basename "$newest")")
+      model="$(tac "$newest" | jq -r 'select(.type == "assistant") | .message.model // empty' 2>/dev/null | head -1 || true)"
+      [ -n "$model" ] && kvs+=("model=$model")
+    fi
   fi
 fi
 

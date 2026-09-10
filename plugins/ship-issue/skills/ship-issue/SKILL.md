@@ -15,7 +15,10 @@ code — you orchestrate, question, plan, and verify.
 - One **fresh** Codex session per unit of work, through `scripts/run-codex.sh`. A
   resumed session replays its whole history every turn; the one sanctioned resume is
   the single follow-up in step 5.
-- The deep-tier planner (step 4) is the only subagent this skill dispatches.
+- The deep-tier planner (step 4) is the only subagent this skill dispatches, on
+  `model: opus`. **Never run a subagent or dispatched thread on Fable unless the
+  human explicitly asked for Fable on that run.** A Fable orchestrator loop costs
+  several times an Opus planner, and the ledger's model column will show it.
 
 Two hard gates, in order: **criteria and tier confirmed** (step 2) and **plan
 approved** (step 4). No code is written before both.
@@ -53,7 +56,9 @@ None of these writes are skippable:
 - `scripts/ledger.sh event=run-start issue=<n> repo=<owner/name> tier=<tier> cwd="$PWD"`
   — at gate 1. It **prints a run id**; keep it and stamp `run=<id>` on every later
   ledger event and `--run <id>` on every `run-codex.sh` call. The issue must be
-  real (an adhoc slug is fine; `0` or empty is rejected).
+  real (an adhoc slug is fine; `0` or empty is rejected). `ledger.sh` records this
+  session's transcript and its model from `cwd`; `usage-report.sh` shows every
+  model the run used, subagents included, in its `cl-models` column.
 - `scripts/run-codex.sh` appends its own event per Codex session.
 - Phase events, so cost can be attributed per step:
   `event=phase phase=plan-approved` at gate 2; `phase=planner-done` when a deep-tier
