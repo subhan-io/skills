@@ -1,15 +1,17 @@
 ---
 name: ship-epic
-description: Work an epic's sub-issues through the ship-issue skill, one tick at a time.
+description: Work an epic's sub-issues one tick at a time, or build a review-ready stack unattended with afk.
 disable-model-invocation: true
 ---
 
 # Ship an epic
 
-A thin wrapper around the `ship-issue` skill. One invocation is one **tick**:
-survey the epic, ship the next sub-issue(s), report, stop. The human merges PRs
-between ticks; re-invoke to continue. All of `ship-issue`'s gates, ledger
-writes, and cost rules apply unchanged inside each run.
+A thin wrapper around the `ship-issue` skill. An attended invocation is one
+**tick**: survey the epic, ship the next sub-issue(s), report, stop; re-invoke to
+continue building the same unmerged stack. The stack is the feature boundary:
+no sub-issue PR merges until every issue in the feature is review-ready. All of
+`ship-issue`'s gates, ledger writes, and cost rules apply unchanged inside each
+run.
 
 Two things belong to the epic rather than to any one sub-issue:
 
@@ -21,9 +23,12 @@ Two things belong to the epic rather than to any one sub-issue:
   migrations compose and are proven in order without touching the dev database.
 
 With `afk` in the invocation, each pick instead runs as its own dispatched t3
-thread in `ship-issue` AFK mode — self-contained, self-merging, a sidebar
-thread with a live transcript — and the tick drains every eligible sub-issue
-before stopping.
+thread in `ship-issue` AFK mode, with a sidebar thread and live transcript. The
+epic run keeps the resulting PRs unmerged and continues until the current stack
+contains every issue in the feature and is review-ready. An issue carrying the
+`hitl` label is a barrier: ship that issue too, then stop without starting any
+later issue. A later invocation continues the same stack after the human has
+handled the checkpoint.
 
 ## 1. Survey
 
@@ -44,16 +49,22 @@ Pass `cwd` so the tick's own Claude session and model are on record.
 `usage-report.sh` subtracts any sub-issue run that starts inside the tick in the
 same session, so an attended tick does not count its sub-issue's cost twice.
 
-Read the epic (`gh issue view <n>`) and its native sub-issues:
+Read the epic (`gh issue view <n>`) and its native sub-issues, including labels:
 
 ```bash
 gh api graphql -f query='query{repository(owner:"<o>",name:"<r>"){issue(number:<n>){
-  subIssues(first:50){nodes{number title state}}}}}'
+  subIssues(first:50){nodes{number title state labels(first:20){nodes{name}}}}}}'
 ```
 
 For each open sub-issue, find any PR that references it (`gh pr list --search
 "<number> in:body"`). Build one status table: sub-issue, state, PR state
-(none / open / green / merged), and blockers.
+(none / open / green / review-ready / merged), and blockers. `green` means CI
+passed; `review-ready` additionally satisfies the AFK completion test in step 3.
+
+In AFK mode, find the first open issue in build order with a case-insensitive
+`hitl` label. That issue is the run's horizon: it remains eligible, while every
+issue after it is outside this run. Apply the horizon before dispatching anything,
+including independent work, so concurrency cannot cross the barrier.
 
 Blockers come from the epic body's build order. If the body states no order,
 put your proposed order to the human in one AskUserQuestion, then edit it into
@@ -64,7 +75,9 @@ the epic body so later ticks read it instead of asking.
 The next sub-issue is the first in build order that is open and has no PR. A
 blocker that is unmerged no longer disqualifies it — the pick stacks on that
 blocker instead (step 3). If none qualifies, report what each remaining
-sub-issue waits on (a review, a human answer) and stop the tick.
+sub-issue waits on (a review, a human answer) and stop the attended tick. In AFK
+mode, keep polling any target-stack PR that is open but not review-ready; absence
+of a new pick is not a successful stopping condition.
 
 **Stack only real dependents.** A pick whose blocker is still open branches from
 that blocker's head and opens its PR with `--base <blocker-branch>`. A pick with
@@ -72,9 +85,10 @@ no open blocker branches from the base branch, as before, and keeps its PR on
 the base. Independent picks must stay independent — do not chain them for
 tidiness, because every link costs a rebase later.
 
-Stack no deeper than three. Past that, one merge rebases too much and every
-review above it goes stale. When the next pick would be a fourth, stop the tick
-and say the stack is full.
+The stack spans the whole feature. It has no PR-count or dependency-depth cap;
+the build order and real dependencies determine its shape. A long stack may cost
+more to restack during the final merge, but that does not justify shipping a
+partial feature.
 
 ## 3. Ship
 
@@ -142,11 +156,14 @@ confirmation.
 
 AFK (the invocation says `afk`): dispatch the pick as its own **t3 thread** via
 `scripts/t3-dispatch.sh` — a real sidebar thread with a full live transcript,
-where an Agent-tool subagent shows only title and token count:
+where an Agent-tool subagent shows only title and token count. AFK here means
+unattended gates, not permission to merge: every dispatched run leaves its PR
+open for the human.
 
 - Make a fresh worktree of `<repo>` on a new branch, write the run's prompt to
-  a file — "Invoke the ship-issue skill with: afk #<n>. When it finishes, post
-  the handover report as a comment on issue #<n>." — then:
+  a file — "Invoke the ship-issue skill with: afk #<n>. This is a ship-epic
+  stack run: leave the PR unmerged even when green and log `outcome=pr-open`.
+  When it finishes, post the handover report as a comment on issue #<n>." — then:
 
   ```bash
   scripts/t3-dispatch.sh --project-root <repo> --title "ship-issue #<n>" \
@@ -164,22 +181,20 @@ where an Agent-tool subagent shows only title and token count:
   It prints the created threadId. First use pairs with the local t3 server and
   caches a bearer under `~/.local/state/ship-issue/`.
 - The issue comment is the completion signal and the report channel: poll it
-  (and the ledger's `run-end`) at a few-minute interval for the outcome. When a
-  run's outcome is `merged`, settle its thread —
-  `scripts/t3-dispatch.sh settle <threadId>` — so the sidebar shows only runs
-  that still need the human. Any other outcome leaves the thread unsettled.
+  (and the ledger's `run-end`) at a few-minute interval for the outcome. A pick
+  is review-ready only when its full verification and evidence gates passed,
+  its Codex review settled with no valid finding left unresolved, and required
+  PR checks are green. Leave its thread unsettled so the sidebar shows the stack
+  waiting for human review.
 - Independent picks may run concurrently, **two in flight at most** — a run is in
   flight from dispatch until its issue comment lands. This box also builds and
-  serves; a third concurrent run starves all three. A pick that stacks on an
-  in-flight blocker may also start, but it must not merge before its blocker: an AFK run
-  merges its own PR, and merging a stacked PR into its blocker's branch buries
-  the work instead of shipping it. Tell such a run to hand over unmerged, and
-  merge it yourself in a later tick once the restack has retargeted it onto the
-  base branch.
+  serves; a third concurrent run starves all three. A dependent pick waits until
+  its blocker is review-ready before branching, so its branch contains the
+  blocker's finished work. Never dispatch past the AFK run's `hitl` horizon.
 - A run that reports not-AFK-eligible (deep tier, unanswerable question) parks
   its sub-issue for an attended tick — never retry it AFK.
 
-## 4. Restack after every merge
+## 4. Restack during the final merge
 
 The base repository squash-merges, so a merge rewrites the merged branch's
 commits. Every branch stacked above it is now on a stale base and its diff would
@@ -191,8 +206,9 @@ scripts/stack.sh restack --repo <repo> --base <base-branch>
 
 It rebases each tracked branch onto its new parent bottom-up, force-pushes with
 a lease, and retargets each PR — a branch whose parent has merged gets reparented
-onto the base branch, whether or not the merge deleted it. Run it immediately
-after any merge lands, attended or AFK, before picking again.
+onto the base branch, whether or not the merge deleted it. Building the feature
+does not enter this step because its stack stays unmerged. Once the complete
+feature is review-ready and merging begins, run it immediately after each merge.
 
 Each rebase runs inside the worktree that holds the branch, since git will not
 switch to a branch another worktree has checked out. A dirty worktree therefore
@@ -239,13 +255,22 @@ believing work that never reached the remote.
 
 ## 5. Continue or report
 
-Attended: after handover, loop to step 2 while the stack is under three deep and
-at most two sub-issues have shipped this session — past that, context outgrows
-the tick.
+Attended: after handover, loop to step 2 until at most two sub-issues have shipped
+this session — past that, context outgrows the tick. Leave the stack unmerged;
+the next tick continues it.
 
-AFK: runs self-merge, so keep draining — after each run's report, restack (step
-4), refresh the survey, and dispatch the next pick, until the epic has no
-eligible open sub-issue left.
+AFK: keep draining without merging. Refresh the survey after each report and
+dispatch the next pick until either:
+
+- every sub-issue in the epic has a review-ready PR, making the complete feature
+  ready for human review; or
+- the `hitl` horizon's PR and every PR before it in the stack are review-ready,
+  making that checkpoint ready for the human.
+
+At a `hitl` horizon, ship the labeled issue and wait for the stack through that
+issue to satisfy the review-ready test before stopping. Failures and
+AFK-ineligible issues still stop the run for human attention; never step around
+one to continue the feature.
 
 End every tick by rewriting the epic's status block: the table from step 1,
 refreshed — what shipped or merged, what is parked for an attended tick, what
