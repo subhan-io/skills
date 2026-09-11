@@ -157,7 +157,9 @@ where an Agent-tool subagent shows only title and token count:
   **Never dispatch on Fable unless the human asked for Fable on that run**: the
   orchestrator loop is turns × context, and one Fable AFK run cost more than the
   rest of its tick combined. The same rule holds for every Agent-tool subagent
-  either skill spawns.
+  either skill spawns. Say the model in chat as you dispatch, one line:
+  `Dispatching ship-issue #640 as a t3 thread on claude-sonnet-5`. The script
+  prints the same line to stderr.
 
   It prints the created threadId. First use pairs with the local t3 server and
   caches a bearer under `~/.local/state/ship-issue/`.

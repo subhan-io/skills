@@ -89,6 +89,7 @@ EOF
 
 NOW=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 THREAD_ID=$(uuid)
+echo "dispatching \"$TITLE\" as a t3 thread on $MODEL" >&2
 PROMPT=$(python3 -c "import json,sys;print(json.dumps(open(sys.argv[1]).read()))" "$PROMPT_FILE")
 BRANCH_JSON=null; [ -n "$BRANCH" ] && BRANCH_JSON="\"$BRANCH\""
 WORKTREE_JSON=null; [ -n "$WORKTREE" ] && WORKTREE_JSON="\"$WORKTREE\""

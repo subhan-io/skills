@@ -19,6 +19,9 @@ code — you orchestrate, question, plan, and verify.
   `model: opus`. **Never run a subagent or dispatched thread on Fable unless the
   human explicitly asked for Fable on that run.** A Fable orchestrator loop costs
   several times an Opus planner, and the ledger's model column will show it.
+  Every dispatch names its model in chat before it starts, one line, e.g.
+  `Dispatching Plan agent for #606 on opus`. A dispatch the human cannot see the
+  model of is a dispatch they cannot stop in time.
 
 Two hard gates, in order: **criteria and tier confirmed** (step 2) and **plan
 approved** (step 4). No code is written before both.
