@@ -111,10 +111,12 @@ The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-i
 invocation is one tick that surveys the epic, ships the next unblocked sub-issue through
 `/ship-issue` with the epic's build order and contracts as context, restacks dependent PRs
 after a merge (routing rebase conflicts to a Codex session), and rewrites a status block in
-the epic body. The human merges between ticks. `/ship-epic afk` instead
-dispatches each pick as its own t3code sidebar thread (via the local t3 server's HTTP
-dispatch API) running `/ship-issue afk` — unattended light/standard runs that self-merge
-on green — and drains the epic in one invocation.
+the epic body. Attended ticks keep extending the unmerged stack; merging starts after the
+whole feature is review-ready. `/ship-epic afk` instead dispatches each pick as its own
+t3code sidebar thread (via the local t3 server's HTTP dispatch API), runs
+the light/standard gates unattended, and leaves every issue in the feature as a green,
+unmerged PR stack ready for review. An issue labeled `hitl` is completed as a checkpoint
+and stops the run from advancing to later issues.
 
 ### plan-explainer
 
