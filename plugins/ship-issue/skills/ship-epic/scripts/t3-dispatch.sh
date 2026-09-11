@@ -5,6 +5,11 @@
 # Usage:
 #   t3-dispatch.sh --project-root <abs-path> --title "ship-issue #23" \
 #     --prompt-file <file> [--model <model>] [--worktree <abs-path> --branch <name>]
+#
+# The thread's model defaults to claude-sonnet-5. Never default a dispatched
+# thread or subagent to Fable: a #640 AFK run on claude-fable-5 read 7.9M cache
+# tokens in 30 minutes, four times the deep-tier Opus planner. Pass --model
+# claude-fable-5 only when the human asked for Fable on that run.
 #   t3-dispatch.sh settle <threadId>     # clear the thread's attention marker
 #
 # Prints the created threadId on stdout.
@@ -14,7 +19,7 @@
 # expiry; re-pairs automatically when a dispatch gets a 401).
 set -euo pipefail
 
-MODEL="claude-fable-5"
+MODEL="${SHIP_ISSUE_DISPATCH_MODEL:-claude-sonnet-5}"
 WORKTREE="" BRANCH="" PROJECT_ROOT="" TITLE="" PROMPT_FILE="" SETTLE_THREAD=""
 if [ "${1:-}" = "settle" ]; then SETTLE_THREAD="${2:?settle needs a threadId}"; shift 2; fi
 while [ $# -gt 0 ]; do
@@ -84,6 +89,7 @@ EOF
 
 NOW=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 THREAD_ID=$(uuid)
+echo "dispatching \"$TITLE\" as a t3 thread on $MODEL" >&2
 PROMPT=$(python3 -c "import json,sys;print(json.dumps(open(sys.argv[1]).read()))" "$PROMPT_FILE")
 BRANCH_JSON=null; [ -n "$BRANCH" ] && BRANCH_JSON="\"$BRANCH\""
 WORKTREE_JSON=null; [ -n "$WORKTREE" ] && WORKTREE_JSON="\"$WORKTREE\""

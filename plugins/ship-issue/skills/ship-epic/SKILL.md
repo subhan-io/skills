@@ -37,11 +37,12 @@ sessions (step 4) and the run-end in step 5. `<ship-issue>` below is the sibling
 `ship-issue` skill directory, beside this one.
 
 ```bash
-tick=$(<ship-issue>/scripts/ledger.sh event=run-start issue=epic-<n> tier=epic)
+tick=$(<ship-issue>/scripts/ledger.sh event=run-start issue=epic-<n> tier=epic cwd="$PWD")
 ```
 
-No `cwd` on purpose: the sub-issue runs inside the tick already account for this
-session's Claude cost, and a cwd would count it twice.
+Pass `cwd` so the tick's own Claude session and model are on record.
+`usage-report.sh` subtracts any sub-issue run that starts inside the tick in the
+same session, so an attended tick does not count its sub-issue's cost twice.
 
 Read the epic (`gh issue view <n>`) and its native sub-issues:
 
@@ -149,8 +150,16 @@ where an Agent-tool subagent shows only title and token count:
 
   ```bash
   scripts/t3-dispatch.sh --project-root <repo> --title "ship-issue #<n>" \
-    --prompt-file <f> --worktree <worktree> --branch <branch>
+    --prompt-file <f> --worktree <worktree> --branch <branch> --model claude-sonnet-5
   ```
+
+  The dispatched thread is the run's orchestrator, and it runs on Sonnet.
+  **Never dispatch on Fable unless the human asked for Fable on that run**: the
+  orchestrator loop is turns × context, and one Fable AFK run cost more than the
+  rest of its tick combined. The same rule holds for every Agent-tool subagent
+  either skill spawns. Say the model in chat as you dispatch, one line:
+  `Dispatching ship-issue #640 as a t3 thread on claude-sonnet-5`. The script
+  prints the same line to stderr.
 
   It prints the created threadId. First use pairs with the local t3 server and
   caches a bearer under `~/.local/state/ship-issue/`.

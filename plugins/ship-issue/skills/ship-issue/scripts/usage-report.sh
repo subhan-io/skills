@@ -16,11 +16,17 @@
 #     a rollout's total_token_usage is cumulative — summing a chunk event and its
 #     resume event would double count.
 #   - Claude: assistant-message usage from the exact transcript recorded as
-#     claudeSession at run-start; runs without one fall back to every transcript
-#     in the cwd's project dir within the time window (overlapping runs in one
-#     worktree double count under this fallback). Raw tokens, split cache-read /
-#     cache-write / output — cache reads dominate and are what subscription
-#     limits mostly meter.
+#     claudeSession at run-start, plus that session's Agent-tool subagent
+#     transcripts (<session>/subagents/*.jsonl); runs without one fall back to
+#     every transcript in the cwd's project dir within the time window
+#     (overlapping runs in one worktree double count under this fallback). Raw
+#     tokens, split cache-read / cache-write / output — cache reads dominate and
+#     are what subscription limits mostly meter. `models` lists every model that
+#     answered, with its message count, so a run that landed on Fable shows it.
+#   - Nested runs: a run that starts inside another run's window in the same
+#     claudeSession (a ship-epic tick and the attended sub-issue it ships) is
+#     subtracted from the outer run, so the tick row shows only the tick's own
+#     turns.
 #   - Phase events (event=phase) are listed per run in --json output.
 # A run with no run-end is reported as open, window capped at now.
 set -euo pipefail
@@ -60,7 +66,7 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
              | group_by(.sessionId)
              | map(max_by((toks // {} | .total_tokens) // -1))) as $sess   # per session: cumulative totals, skip null rows
       | {run: ($s.run // null), issue: ($s.issue|tostring), tier: ($s.tier // "?"),
-         cwd: ($s.cwd // ""), claudeSession: ($s.claudeSession // null),
+         cwd: ($s.cwd // ""), claudeSession: ($s.claudeSession // null), model: ($s.model // null),
          start: $s.ts, end: ($e.ts // $now), open: ($e == null),
          durationMin: ((((($e.ts // $now) | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime)
                         - ($s.ts | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime)) / 60) | round),
@@ -95,28 +101,36 @@ for i in $(seq 0 $((n - 1))); do
   start="$(jq -r '.start' <<<"$run")"
   end="$(jq -r '.end' <<<"$run")"
   claude_session="$(jq -r '.claudeSession // ""' <<<"$run")"
-  claude='{"msgs":0,"cache_read":0,"cache_write":0,"out":0,"join":"none"}'
+  claude='{"msgs":0,"cache_read":0,"cache_write":0,"out":0,"models":{},"join":"none"}'
+  # Windows of runs nested inside this one in the same session: excluded below.
+  nested="$(jq -c --argjson r "$run" '[.[] | select(.run != $r.run and .claudeSession != null
+              and .claudeSession == $r.claudeSession and .start >= $r.start and .start <= $r.end)
+              | {s: .start, e: .end}]' <<<"$runs")"
   if [ -n "$cwd" ]; then
     proj_dir="$HOME/.claude/projects/$(echo "$cwd" | sed 's|[/.]|-|g')"
     files="" join="none"
     if [ -n "$claude_session" ] && [ -f "$proj_dir/$claude_session" ]; then
       files="$proj_dir/$claude_session"; join="session"
+      sub_dir="$proj_dir/${claude_session%.jsonl}/subagents"
+      [ -d "$sub_dir" ] && files="$files"$'\n'"$(find "$sub_dir" -name '*.jsonl' 2>/dev/null)"
     elif [ -d "$proj_dir" ]; then
       files="$(find "$proj_dir" -name '*.jsonl' -newermt "${start%Z}" 2>/dev/null)"; join="window"
     fi
     if [ -n "$files" ]; then
       claude="$(echo "$files" \
         | xargs -r cat 2>/dev/null \
-        | jq -c --arg s "$start" --arg e "$end" \
+        | jq -c --arg s "$start" --arg e "$end" --argjson nested "$nested" \
             'select(.type == "assistant" and .message.usage and .timestamp >= $s and .timestamp <= $e)
-             | {id: (.message.id // "x"), u: .message.usage}' 2>/dev/null \
+             | select(.timestamp as $t | any($nested[]; $t >= .s and $t <= .e) | not)
+             | {id: (.message.id // "x"), u: .message.usage, model: (.message.model // "?")}' 2>/dev/null \
         | jq -s --arg join "$join" '(group_by(.id) | map(.[-1])) as $m
                  | {msgs: ($m|length),
                     cache_read: ($m | map(.u.cache_read_input_tokens // 0) | add // 0),
                     cache_write: ($m | map(.u.cache_creation_input_tokens // 0) | add // 0),
                     out: ($m | map(.u.output_tokens // 0) | add // 0),
+                    models: ($m | group_by(.model) | map({(.[0].model): length}) | add // {}),
                     join: $join}')"
-      [ -n "$claude" ] || claude='{"msgs":0,"cache_read":0,"cache_write":0,"out":0,"join":"none"}'
+      [ -n "$claude" ] || claude='{"msgs":0,"cache_read":0,"cache_write":0,"out":0,"models":{},"join":"none"}'
     fi
   fi
   report="$(jq -c --argjson r "$run" --argjson c "$claude" '. + [$r + {claude: $c}]' <<<"$report")"
@@ -130,11 +144,12 @@ fi
 echo "ship-issue runs since $SINCE  (cl-join: session = exact transcript, window = cwd+time fallback, may double count overlaps)"
 jq -r '
   def m: tostring | if (.|length) > 6 then (.[0:-6] + "." + .[-6:-5] + "M") else . end;
-  (["issue","tier","start","min","outcome","chk","rr","vfail","cdx-fail","find-ok/bad","cdx-sess","cdx-total","cdx-uncached","cl-cread","cl-cwrite","cl-out","cl-join"] | @tsv),
+  def models: to_entries | map((.key | sub("^claude-"; "")) + ":" + (.value|tostring)) | join(" ") | if . == "" then "-" else . end;
+  (["issue","tier","start","min","outcome","chk","rr","vfail","cdx-fail","find-ok/bad","cdx-sess","cdx-total","cdx-uncached","cl-cread","cl-cwrite","cl-out","cl-models","cl-join"] | @tsv),
   (.[] | [.issue, .tier, (.start[0:16] + " "), .durationMin, .outcome,
           (.chunks // "-"), (.reviewRounds // "-"),
           .verifyFailed, .codexFailures,
           ((.findingsValid // "-"|tostring) + "/" + (.findingsInvalid // "-"|tostring)),
           .codex.sessions, (.codex.total|m), (.codex.uncached|m),
-          (.claude.cache_read|m), (.claude.cache_write|m), (.claude.out|m), .claude.join] | @tsv)
+          (.claude.cache_read|m), (.claude.cache_write|m), (.claude.out|m), (.claude.models|models), .claude.join] | @tsv)
 ' <<<"$report" | if command -v column >/dev/null 2>&1; then column -t -s $'\t'; else awk -F'\t' '{for (i=1;i<=NF;i++) printf "%-16s", $i; print ""}'; fi
