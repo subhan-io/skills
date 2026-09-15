@@ -107,15 +107,16 @@ The skill carries its own Codex-harness adaptations, so the native Codex plugin 
 workflow. Uses the plan-explainer, ui-evidence, and codex-review plugins — install those
 alongside it.
 
-The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues: each
-invocation is one tick that surveys the epic, ships the next unblocked sub-issue through
-`/ship-issue` with the epic's build order and contracts as context, restacks dependent PRs
-after a merge (routing rebase conflicts to a Codex session), and rewrites a status block in
-the epic body. Attended ticks keep extending the unmerged stack; merging starts after the
-whole feature is review-ready. `/ship-epic afk` instead dispatches each pick as its own
-t3code sidebar thread (via the local t3 server's HTTP dispatch API), runs
-the light/standard gates unattended, and leaves every issue in the feature as a green,
-unmerged PR stack ready for review. An issue labeled `hitl` is completed as a checkpoint
+The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues. The
+epic builds on an integration branch, `epic/<n>`: every sub-issue branches from it and opens
+its PR against it, so parallel sub-issues are ordinary siblings and the base branch receives
+the feature once, as the epic's own PR. Each invocation is one tick that syncs the branch
+with the base (routing merge conflicts to a Codex session), surveys the epic, ships the next
+unblocked sub-issue through `/ship-issue` with the epic's build order and contracts as
+context, and rewrites a status block in the epic body. `/ship-epic afk` instead dispatches
+each pick as its own t3code sidebar thread (via the local t3 server's HTTP dispatch API),
+runs the light/standard gates unattended, and merges each review-ready PR into the epic
+branch until the whole feature is in. An issue labeled `hitl` is completed as a checkpoint
 and stops the run from advancing to later issues.
 
 ### plan-explainer

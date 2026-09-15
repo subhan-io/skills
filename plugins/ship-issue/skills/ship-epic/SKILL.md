@@ -1,6 +1,6 @@
 ---
 name: ship-epic
-description: Work an epic's sub-issues one tick at a time, or build a review-ready stack unattended with afk.
+description: Work an epic's sub-issues one tick at a time, or drain it unattended into its integration branch with afk.
 disable-model-invocation: true
 ---
 
@@ -8,27 +8,28 @@ disable-model-invocation: true
 
 A thin wrapper around the `ship-issue` skill. An attended invocation is one
 **tick**: survey the epic, ship the next sub-issue(s), report, stop; re-invoke to
-continue building the same unmerged stack. The stack is the feature boundary:
-no sub-issue PR merges until every issue in the feature is review-ready. All of
-`ship-issue`'s gates, ledger writes, and cost rules apply unchanged inside each
-run.
+continue. All of `ship-issue`'s gates, ledger writes, and cost rules apply
+unchanged inside each run.
 
 Two things belong to the epic rather than to any one sub-issue:
 
-- **A stack.** A sub-issue whose blocker is still open branches off that
-  blocker and opens its PR against it, so the work starts before the merge and
-  each PR still shows only its own diff. Merges are squashes, so every merge
-  costs a restack (step 4) — which is why only real dependents stack.
+- **An integration branch.** `epic/<n>`, forked from the base branch. Every
+  sub-issue branches from its tip and opens its PR against it, and a finished
+  sub-issue merges into it. Parallel sub-issues are then ordinary siblings of one
+  branch — nothing to rebase when one of them merges — and a sub-issue that
+  depends on two others branches from the tip once both are in. The base branch
+  never sees a sub-issue on its own: the human merges `epic/<n>` into it once, as
+  the feature's PR.
 - **A database.** One database per (app, epic), shared by every sub-issue, so
   migrations compose and are proven in order without touching the dev database.
 
 With `afk` in the invocation, each pick instead runs as its own dispatched t3
-thread in `ship-issue` AFK mode, with a sidebar thread and live transcript. The
-epic run keeps the resulting PRs unmerged and continues until the current stack
-contains every issue in the feature and is review-ready. An issue carrying the
-`hitl` label is a barrier: ship that issue too, then stop without starting any
-later issue. A later invocation continues the same stack after the human has
-handled the checkpoint.
+thread in `ship-issue` AFK mode, with a sidebar thread and live transcript. AFK
+means unattended end to end: a dispatched run merges its own PR into `epic/<n>`
+once it is review-ready, and the epic run keeps picking until every sub-issue is
+in. An issue carrying the `hitl` label is a barrier: ship and merge that issue
+too, then stop without starting any later issue. A later invocation continues
+after the human has handled the checkpoint.
 
 ## 1. Survey
 
@@ -49,6 +50,16 @@ Pass `cwd` so the tick's own Claude session and model are on record.
 `usage-report.sh` subtracts any sub-issue run that starts inside the tick in the
 same session, so an attended tick does not count its sub-issue's cost twice.
 
+Make sure the integration branch exists and carries the base branch's latest:
+
+```bash
+scripts/epic-branch.sh ensure --repo <repo> --epic <n> --base <base>
+scripts/epic-branch.sh sync   --repo <repo> --epic <n> --base <base>
+```
+
+`ensure` creates `epic/<n>` from the base when it is absent. `sync` merges the
+base into it and pushes; a conflict goes to step 4 before anything is picked.
+
 Read the epic (`gh issue view <n>`) and its native sub-issues, including labels:
 
 ```bash
@@ -58,8 +69,9 @@ gh api graphql -f query='query{repository(owner:"<o>",name:"<r>"){issue(number:<
 
 For each open sub-issue, find any PR that references it (`gh pr list --search
 "<number> in:body"`). Build one status table: sub-issue, state, PR state
-(none / open / green / review-ready / merged), and blockers. `green` means CI
-passed; `review-ready` additionally satisfies the AFK completion test in step 3.
+(none / open / green / review-ready / merged into `epic/<n>`), and blockers.
+`green` means CI passed; `review-ready` additionally satisfies the completion
+test in step 3.
 
 In AFK mode, find the first open issue in build order with a case-insensitive
 `hitl` label. That issue is the run's horizon: it remains eligible, while every
@@ -72,42 +84,28 @@ the epic body so later ticks read it instead of asking.
 
 ## 2. Pick
 
-The next sub-issue is the first in build order that is open and has no PR. A
-blocker that is unmerged no longer disqualifies it — the pick stacks on that
-blocker instead (step 3). If none qualifies, report what each remaining
-sub-issue waits on (a review, a human answer) and stop the attended tick. In AFK
-mode, keep polling any target-stack PR that is open but not review-ready; absence
-of a new pick is not a successful stopping condition.
-
-**Stack only real dependents.** A pick whose blocker is still open branches from
-that blocker's head and opens its PR with `--base <blocker-branch>`. A pick with
-no open blocker branches from the base branch, as before, and keeps its PR on
-the base. Independent picks must stay independent — do not chain them for
-tidiness, because every link costs a rebase later.
-
-The stack spans the whole feature. It has no PR-count or dependency-depth cap;
-the build order and real dependencies determine its shape. A long stack may cost
-more to restack during the final merge, but that does not justify shipping a
-partial feature.
+The next sub-issue is the first in build order that is open, has no PR, and
+whose blockers have all merged into `epic/<n>`. A blocker that is open but
+unmerged is a wait, not a branch to build on: the pick starts once it lands,
+from a tip that holds the blocker's finished work. Independent sub-issues are
+eligible together. If none qualifies, report what each remaining sub-issue
+waits on (a blocker's merge, a review, a human answer) and stop the attended
+tick. In AFK mode, keep polling any PR still open against `epic/<n>`; absence of
+a new pick is not a stopping condition while a run is in flight.
 
 ## 3. Ship
 
 Before the pick's run starts, prepare its branch and its database.
 
-**Branch.** Create the worktree from the pick's parent — the blocker's branch
-for a stacked pick, the base branch otherwise — then record the link:
-
-```bash
-scripts/stack.sh track --repo <repo> --branch <branch> --parent <parent>
-```
-
-The record is what makes step 4 able to repair the stack. Skip it and the
-branch silently drops out of every later restack.
+**Branch.** Create the worktree from the tip of `origin/epic/<n>` on a new
+branch. The pick's PR opens with `--base epic/<n>`; name that base to
+`ship-issue` — in the invocation for an attended run, in the prompt file for an
+AFK one — and it passes it to `gh pr create`.
 
 **Database.** Skip this when no sub-issue of the epic touches the schema or
 needs real data. Otherwise every sub-issue of the epic shares one database, so
 sub-issue B's migration applies on top of sub-issue A's and an ordering conflict
-surfaces while the stack is still open:
+surfaces while the branch is still open:
 
 ```bash
 url_file=$(scripts/epic-db.sh --repo <repo> --app <app> --epic <n>)
@@ -152,18 +150,19 @@ to it when its plan settles a contract a later sub-issue depends on.
 Attended (default): run the `ship-issue` skill on the picked sub-issue, end to
 end, in this session. Its criteria gate stays live — the epic body's decisions
 are context for the criteria draft, not a substitute for the human's
-confirmation.
+confirmation. The human merges the sub-issue's PR into `epic/<n>`; the next tick
+continues from there.
 
 AFK (the invocation says `afk`): dispatch the pick as its own **t3 thread** via
 `scripts/t3-dispatch.sh` — a real sidebar thread with a full live transcript,
-where an Agent-tool subagent shows only title and token count. AFK here means
-unattended gates, not permission to merge: every dispatched run leaves its PR
-open for the human.
+where an Agent-tool subagent shows only title and token count. The dispatched
+run merges its own PR into `epic/<n>`; the base branch stays the human's.
 
 - Make a fresh worktree of `<repo>` on a new branch, write the run's prompt to
-  a file — "Invoke the ship-issue skill with: afk #<n>. This is a ship-epic
-  stack run: leave the PR unmerged even when green and log `outcome=pr-open`.
-  When it finishes, post the handover report as a comment on issue #<n>." — then:
+  a file — "Invoke the ship-issue skill with: afk #<n>. This is a ship-epic run:
+  open the PR against `epic/<n>` and, once it is review-ready and green, merge it
+  there. When it finishes, post the handover report as a comment on issue #<n>,
+  as the run's last action." — then:
 
   ```bash
   scripts/t3-dispatch.sh --project-root <repo> --title "ship-issue #<n>" \
@@ -178,106 +177,120 @@ open for the human.
   `Dispatching ship-issue #640 as a t3 thread on claude-sonnet-5`. The script
   prints the same line to stderr.
 
-  It prints the created threadId. First use pairs with the local t3 server and
-  caches a bearer under `~/.local/state/ship-issue/`.
+  It prints the created threadId; keep it beside the issue number for the rest
+  of the run. First use pairs with the local t3 server and caches a bearer under
+  `~/.local/state/ship-issue/`.
 - The issue comment is the completion signal and the report channel: poll it
   (and the ledger's `run-end`) at a few-minute interval for the outcome. A pick
   is review-ready only when its full verification and evidence gates passed,
   its Codex review settled with no valid finding left unresolved, and required
-  PR checks are green. Leave its thread unsettled so the sidebar shows the stack
-  waiting for human review.
-- Independent picks may run concurrently, **two in flight at most** — a run is in
-  flight from dispatch until its issue comment lands. This box also builds and
-  serves; a third concurrent run starves all three. A dependent pick waits until
-  its blocker is review-ready before branching, so its branch contains the
-  blocker's finished work. Never dispatch past the AFK run's `hitl` horizon.
+  PR checks are green; the run merges on that test and nothing weaker.
+- **Settle the thread once its handoff is complete.** When the comment is up and
+  the ledger holds the run's `run-end` with `outcome=merged`, clear the thread's
+  attention marker:
+
+  ```bash
+  scripts/t3-dispatch.sh settle <threadId>
+  ```
+
+  The script waits for the thread's turn to end before settling, since a turn
+  that ends afterwards re-marks the thread. The marker means "a human must look
+  here", and a merged run has nothing left to look at: its report is on the
+  issue and its work is in `epic/<n>`. A run that stopped short —
+  `outcome=stopped` or `pr-open`, not-AFK-eligible, a failed gate — keeps its
+  thread unsettled: the marker is the sidebar's record that it needs a human,
+  and its transcript is where they read why.
+- Independent picks may run concurrently, **three in flight by default** — a
+  run is in flight from dispatch until its issue comment lands. Three is a
+  guess, not a measurement: the box also builds and serves, and nothing has yet
+  shown where it saturates. Change it in the invocation (`afk 4`) and read the
+  ledger's run durations against the overlap before a new number becomes the
+  default. A dependent pick waits until its blocker has merged into `epic/<n>`
+  before branching. Never dispatch past the AFK run's `hitl` horizon.
 - A run that reports not-AFK-eligible (deep tier, unanswerable question) parks
   its sub-issue for an attended tick — never retry it AFK.
 
-## 4. Restack during the final merge
+## 4. Keep the integration branch current
 
-The base repository squash-merges, so a merge rewrites the merged branch's
-commits. Every branch stacked above it is now on a stale base and its diff would
-re-show the merged work. Repair the whole stack in one command:
+`epic/<n>` drifts from the base branch while the feature builds. Step 1 syncs
+it at the start of every tick, and step 5 syncs it again before the epic PR is
+opened or refreshed, so the feature's PR always shows the feature's own diff.
 
 ```bash
-scripts/stack.sh restack --repo <repo> --base <base-branch>
+scripts/epic-branch.sh sync --repo <repo> --epic <n> --base <base>
 ```
 
-It rebases each tracked branch onto its new parent bottom-up, force-pushes with
-a lease, and retargets each PR — a branch whose parent has merged gets reparented
-onto the base branch, whether or not the merge deleted it. Building the feature
-does not enter this step because its stack stays unmerged. Once the complete
-feature is review-ready and merging begins, run it immediately after each merge.
-
-Each rebase runs inside the worktree that holds the branch, since git will not
-switch to a branch another worktree has checked out. A dirty worktree therefore
-stops the run rather than being rewritten underneath whoever is working in it —
-commit or set those changes aside first.
-
-Two consequences to carry into the report:
-
-- A rebase force-push starts a fresh CI run on every branch it moved. Wait for
-  those before merging anything else, and never apply a label while one is in
-  flight — a cancelled required check blocks the merge permanently.
-- A `codex-review` round that ran before a restack is stale. A PR whose content
-  the rebase changed needs its round again; a clean replay does not.
-
-When the rebase conflicts, the script stops, leaves the branch untouched, and
-prints one line on stdout:
+It merges the base into `epic/<n>` in a worktree of its own and pushes; when the
+branch is current or the merge is clean it prints nothing. On a conflict it
+aborts the merge, leaves the worktree clean at `origin/epic/<n>`, and prints one
+line on stdout:
 
 ```text
-conflict branch=<b> parent=<p> onto=<sha> from=<sha> worktree=<dir>
+conflict branch=epic/<n> base=<base> worktree=<dir>
 ```
 
-Route it to a Codex restack session; a human resolving merge hunks is the tick
+Route it to a Codex sync session; a human resolving merge hunks is the tick
 stalling. Write a prompt from those values: in `<worktree>`, run
-`git rebase --onto <onto> <from> <b>`, resolve each hunk preserving the intent of
-both sides (the merged PR's diff and the epic's `## Contracts` say what the parent
-side meant), run the sub-issue's verify command, then
-`git push --force-with-lease origin <b>`. Append `anti-slop.md` and `handoff.md`
-from the `ship-issue` skill directory, then:
+`git merge origin/<base>`, resolve each hunk preserving the intent of both sides
+(the epic's `## Contracts` says what the epic side meant), run the app's verify
+command, then `git push origin HEAD:refs/heads/epic/<n>`. Append `anti-slop.md`
+and `handoff.md` from the `ship-issue` skill directory, then:
 
 ```bash
-<ship-issue>/scripts/run-codex.sh --role restack --issue <epic> --run "$tick" \
+<ship-issue>/scripts/run-codex.sh --role sync --issue <epic> --run "$tick" \
   --prompt-file <f> --out <f.last.md> --cd <worktree>
 ```
 
-Read the handoff. A pushed, verified rebase is followed by
-`scripts/stack.sh track --repo <repo> --branch <b> --parent <p>`, which re-records
-the fork point from the new merge base, and then `restack` again for the rest of
-the stack. A handoff that reports both sides changed one contract incompatibly is
-an escalation: leave the branch where the script left it and take it to the human.
-Never let the epic continue on a half-restacked stack, and never force-push a guess
-to make it green. A failed push is undone by the script itself: the branch is
-rolled back to where it started, so a re-run redoes the whole step rather than
-believing work that never reached the remote.
+Read the handoff. A pushed, verified merge is followed by `sync` again, which
+now prints nothing. A handoff that reports both sides changed one contract
+incompatibly is an escalation: leave the branch where the script left it and
+take it to the human. Only a pushed merge counts — the next `sync` resets the
+worktree to what origin holds, so a merge that never reached the remote is
+redone, not believed.
+
+A sub-issue PR that opened before a sync is behind `epic/<n>`. That is an
+ordinary PR whose base moved: its diff stays its own and CI runs on the merge
+result. A conflict there belongs to the sub-issue's run, in a fresh `--role fix`
+session before its merge, not to the tick.
 
 ## 5. Continue or report
 
 Attended: after handover, loop to step 2 until at most two sub-issues have shipped
-this session — past that, context outgrows the tick. Leave the stack unmerged;
-the next tick continues it.
+this session — past that, context outgrows the tick. Each sub-issue's PR waits
+for the human's merge into `epic/<n>`; the next tick continues from what has
+landed.
 
-AFK: keep draining without merging. Refresh the survey after each report and
-dispatch the next pick until either:
+AFK: keep picking and merging. Refresh the survey after each report and dispatch
+the next pick until either:
 
-- every sub-issue in the epic has a review-ready PR, making the complete feature
-  ready for human review; or
-- the `hitl` horizon's PR and every PR before it in the stack are review-ready,
+- every sub-issue in the epic has merged into `epic/<n>`, making the complete
+  feature ready for the human's review; or
+- the `hitl` horizon and every issue before it in build order have merged,
   making that checkpoint ready for the human.
 
-At a `hitl` horizon, ship the labeled issue and wait for the stack through that
-issue to satisfy the review-ready test before stopping. Failures and
-AFK-ineligible issues still stop the run for human attention; never step around
-one to continue the feature.
+Failures and AFK-ineligible issues still stop the run for human attention;
+never step around one to continue the feature.
+
+**The epic PR.** The feature reaches the base branch as one PR, `epic/<n>` into
+`<base>`. Sync first (step 4), then open it as a draft when the first sub-issue
+merges into the branch, and mark it ready when the run reaches the feature's end
+or the `hitl` horizon:
+
+```bash
+gh pr create --base <base> --head epic/<n> --draft --title "<epic title> (#<n>)" --body-file <f>
+gh pr ready <pr>
+```
+
+Its body holds the epic link and the list of sub-issue PRs merged into the
+branch, each linked; refresh that list every tick. The human merges it — the
+skill never does.
 
 End every tick by rewriting the epic's status block: the table from step 1,
-refreshed — what shipped or merged, what is parked for an attended tick, what
-waits on the human, what the next tick will pick up — then the stack as
-`scripts/stack.sh list` prints it, so the human can see what a merge will rebase
-before they merge it, and the epic database with whether this tick migrated it.
-Write it to a file and replace the block in the body:
+refreshed — what merged into `epic/<n>`, what is parked for an attended tick,
+what waits on the human, what the next tick will pick up — then the branch as
+`scripts/epic-branch.sh status` prints it (drift from the base, PRs merged and
+open against it, the epic PR), and the epic database with whether this tick
+migrated it. Write it to a file and replace the block in the body:
 
 ```bash
 scripts/epic-status.sh --repo <repo> --epic <n> --file <status.md>

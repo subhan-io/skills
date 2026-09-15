@@ -19,7 +19,9 @@
 #   - `claudeSession` (this orchestrator session's transcript file) is recorded
 #     automatically from the newest transcript under the cwd's project dir, so
 #     usage-report.sh can sum exactly this session instead of a time window.
-#     Pass claudeSession=<file.jsonl> explicitly to override.
+#     The project dir is keyed by the session's starting directory, so a cwd
+#     passed from a subdirectory (apps/content) is walked up to the nearest
+#     ancestor that has one. Pass claudeSession=<file.jsonl> explicitly to override.
 #   - `model` (the orchestrator's model, from that transcript's latest assistant
 #     message) is recorded beside it, so a run on the wrong model is visible in
 #     the ledger row itself, not only in usage-report.sh.
@@ -30,6 +32,19 @@ set -euo pipefail
 
 LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
 mkdir -p "$(dirname "$LEDGER")"
+
+# Claude keys a session's transcript dir by the directory the session started in.
+# Walk up from $1 to the nearest ancestor with transcripts, so a run started from
+# a subdirectory still finds its session. Prints nothing and fails when none does.
+claude_project_dir() {
+  local d="$1" p
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    p="$HOME/.claude/projects/$(echo "$d" | sed 's|[/.]|-|g')"
+    if ls "$p"/*.jsonl >/dev/null 2>&1; then echo "$p"; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
 
 event="" issue="" run_id="" cwd="" claude_session="" phase="" outcome=""
 kvs=()
@@ -61,7 +76,7 @@ if [ "$event" = "phase" ]; then
 fi
 
 # `tick` closes a ship-epic tick's run (issue=epic-<n>, tier=epic): the run that
-# owns the tick's own Codex sessions, such as a restack.
+# owns the tick's own Codex sessions, such as an integration-branch sync.
 if [ "$event" = "run-end" ]; then
   case "$outcome" in
     pr-open|merged|stopped|split|tick) ;;
@@ -84,7 +99,7 @@ if [ "$event" = "run-start" ]; then
     kvs+=("run=$run_id")
   fi
   if [ -z "$claude_session" ] && [ -n "$cwd" ]; then
-    proj_dir="$HOME/.claude/projects/$(echo "$cwd" | sed 's|[/.]|-|g')"
+    proj_dir="$(claude_project_dir "$cwd" || true)"
     newest="$(ls -t "$proj_dir"/*.jsonl 2>/dev/null | head -1 || true)"
     if [ -n "$newest" ]; then
       kvs+=("claudeSession=$(basename "$newest")")

@@ -32,6 +32,19 @@
 set -euo pipefail
 
 LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
+
+# Same walk-up as ledger.sh: the transcript dir is keyed by the session's starting
+# directory, and a run's cwd may be a subdirectory of it.
+claude_project_dir() {
+  local d="$1" p
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    p="$HOME/.claude/projects/$(echo "$d" | sed 's|[/.]|-|g')"
+    if ls "$p"/*.jsonl >/dev/null 2>&1; then echo "$p"; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+
 SINCE="$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
 AS_JSON=false
 RUN=""
@@ -107,7 +120,7 @@ for i in $(seq 0 $((n - 1))); do
               and .claudeSession == $r.claudeSession and .start >= $r.start and .start <= $r.end)
               | {s: .start, e: .end}]' <<<"$runs")"
   if [ -n "$cwd" ]; then
-    proj_dir="$HOME/.claude/projects/$(echo "$cwd" | sed 's|[/.]|-|g')"
+    proj_dir="$(claude_project_dir "$cwd" || true)"
     files="" join="none"
     if [ -n "$claude_session" ] && [ -f "$proj_dir/$claude_session" ]; then
       files="$proj_dir/$claude_session"; join="session"
