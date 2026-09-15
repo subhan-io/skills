@@ -19,8 +19,10 @@
 # for a resolver to redo the merge in.
 #
 # The merge runs in a worktree of its own under ~/.local/state/ship-issue/epic-N/,
-# detached and reset to origin/epic/N on every sync, so nothing a resolver left
-# half-done survives a re-run: only a pushed merge counts.
+# named for the repository (origin's owner/name) so two repositories that both
+# have an epic N never share one, and checked to belong to this repository before
+# it is reused. It is detached and reset to origin/epic/N on every sync, so
+# nothing a resolver left half-done survives a re-run: only a pushed merge counts.
 set -euo pipefail
 
 cmd="${1:-}"; shift || true
@@ -58,14 +60,18 @@ case "$cmd" in
     if git merge-base --is-ancestor "origin/$base" "origin/$branch"; then
       say "$branch already contains origin/$base"; exit 0
     fi
-    wt="$HOME/.local/state/ship-issue/epic-$epic/worktree"
-    if git worktree list --porcelain | grep -Fxq "worktree $wt"; then
+    slug=$(git remote get-url origin | sed -E 's#/$##; s#\.git$##; s#^.*[:/]([^/]+)/([^/]+)$#\1-\2#')
+    wt="$HOME/.local/state/ship-issue/epic-$epic/worktree-$slug"
+    common=$(realpath "$(git rev-parse --git-common-dir)")
+    if git worktree list --porcelain | grep -Fxq "worktree $wt" \
+       && [ "$(realpath "$(command git -C "$wt" rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null)" = "$common" ]; then
       command git -C "$wt" merge --abort >/dev/null 2>&1 || true
       command git -C "$wt" reset --quiet --hard
       command git -C "$wt" checkout --quiet --detach "origin/$branch"
     else
-      # A directory git no longer knows about (a re-clone, a pruned list) is
-      # scratch: the branch it held is on origin or it never counted.
+      # A directory this repository does not own — never registered, pruned, or
+      # left by another checkout — is scratch: the branch it held is on origin
+      # or it never counted.
       rm -rf "$wt"; mkdir -p "$(dirname "$wt")"
       git worktree prune
       git worktree add --quiet --detach "$wt" "origin/$branch"

@@ -273,8 +273,7 @@ never step around one to continue the feature.
 
 **The epic PR.** The feature reaches the base branch as one PR, `epic/<n>` into
 `<base>`. Sync first (step 4), then open it as a draft when the first sub-issue
-merges into the branch, and mark it ready when the run reaches the feature's end
-or the `hitl` horizon:
+merges into the branch, and mark it ready only when every sub-issue has merged:
 
 ```bash
 gh pr create --base <base> --head epic/<n> --draft --title "<epic title> (#<n>)" --body-file <f>
@@ -283,7 +282,9 @@ gh pr ready <pr>
 
 Its body holds the epic link and the list of sub-issue PRs merged into the
 branch, each linked; refresh that list every tick. The human merges it — the
-skill never does.
+skill never does. A `hitl` checkpoint leaves it a draft: the human reads the
+draft's diff so far, the merged sub-issue PRs, and the status block, then
+re-invokes the run; a partial feature never becomes a ready PR.
 
 End every tick by rewriting the epic's status block: the table from step 1,
 refreshed — what merged into `epic/<n>`, what is parked for an attended tick,

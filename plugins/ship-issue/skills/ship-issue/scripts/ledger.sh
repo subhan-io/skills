@@ -19,9 +19,10 @@
 #   - `claudeSession` (this orchestrator session's transcript file) is recorded
 #     automatically from the newest transcript under the cwd's project dir, so
 #     usage-report.sh can sum exactly this session instead of a time window.
-#     The project dir is keyed by the session's starting directory, so a cwd
-#     passed from a subdirectory (apps/content) is walked up to the nearest
-#     ancestor that has one. Pass claudeSession=<file.jsonl> explicitly to override.
+#     The project dir is keyed by the session's starting directory, so every
+#     ancestor of a cwd passed from a subdirectory (apps/content) is a candidate;
+#     the nearest one with a live (recently modified) transcript wins. Pass
+#     claudeSession=<file.jsonl> explicitly to override.
 #   - `model` (the orchestrator's model, from that transcript's latest assistant
 #     message) is recorded beside it, so a run on the wrong model is visible in
 #     the ledger row itself, not only in usage-report.sh.
@@ -33,17 +34,21 @@ set -euo pipefail
 LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
 mkdir -p "$(dirname "$LEDGER")"
 
-# Claude keys a session's transcript dir by the directory the session started in.
-# Walk up from $1 to the nearest ancestor with transcripts, so a run started from
-# a subdirectory still finds its session. Prints nothing and fails when none does.
-claude_project_dir() {
+# Claude keys a session's transcript dir by the directory the session started in,
+# which may be any ancestor of the cwd a run passes. Print every ancestor's
+# transcript dir that exists, nearest first. The caller takes the nearest one
+# whose newest transcript is live (modified in the last few minutes — this very
+# call is being logged to it), so a stale dir for a nested path cannot shadow
+# the session's real dir, and a far ancestor's unrelated live session cannot
+# shadow a nearer one.
+claude_project_dirs() {
   local d="$1" p
   while [ -n "$d" ] && [ "$d" != "/" ]; do
     p="$HOME/.claude/projects/$(echo "$d" | sed 's|[/.]|-|g')"
-    if ls "$p"/*.jsonl >/dev/null 2>&1; then echo "$p"; return 0; fi
+    ls "$p"/*.jsonl >/dev/null 2>&1 && echo "$p"
     d="$(dirname "$d")"
   done
-  return 1
+  return 0
 }
 
 event="" issue="" run_id="" cwd="" claude_session="" phase="" outcome=""
@@ -99,8 +104,14 @@ if [ "$event" = "run-start" ]; then
     kvs+=("run=$run_id")
   fi
   if [ -z "$claude_session" ] && [ -n "$cwd" ]; then
-    proj_dir="$(claude_project_dir "$cwd" || true)"
-    newest="$(ls -t "$proj_dir"/*.jsonl 2>/dev/null | head -1 || true)"
+    newest="" fallback=""
+    for d in $(claude_project_dirs "$cwd"); do
+      cand="$(ls -t "$d"/*.jsonl 2>/dev/null | head -1 || true)"
+      [ -n "$cand" ] || continue
+      [ -n "$fallback" ] || fallback="$cand"
+      if [ "$(( $(date +%s) - $(stat -c %Y "$cand") ))" -lt 600 ]; then newest="$cand"; break; fi
+    done
+    [ -n "$newest" ] || newest="$fallback"
     if [ -n "$newest" ]; then
       kvs+=("claudeSession=$(basename "$newest")")
       model="$(tac "$newest" | jq -r 'select(.type == "assistant") | .message.model // empty' 2>/dev/null | head -1 || true)"
