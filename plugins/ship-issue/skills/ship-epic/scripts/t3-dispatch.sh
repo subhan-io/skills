@@ -10,7 +10,12 @@
 # thread or subagent to Fable: a #640 AFK run on claude-fable-5 read 7.9M cache
 # tokens in 30 minutes, four times the deep-tier Opus planner. Pass --model
 # claude-fable-5 only when the human asked for Fable on that run.
-#   t3-dispatch.sh settle <threadId>     # clear the thread's attention marker
+#   t3-dispatch.sh settle <threadId> [--wait-seconds 900]
+#
+# `settle` clears the thread's attention marker once its handoff is complete. It
+# first waits for the thread's turn to end (polling the t3 projection), because a
+# turn that ends after the settle re-marks the thread; past --wait-seconds it
+# exits 1 without settling.
 #
 # Prints the created threadId on stdout.
 #
@@ -20,7 +25,7 @@
 set -euo pipefail
 
 MODEL="${SHIP_ISSUE_DISPATCH_MODEL:-claude-sonnet-5}"
-WORKTREE="" BRANCH="" PROJECT_ROOT="" TITLE="" PROMPT_FILE="" SETTLE_THREAD=""
+WORKTREE="" BRANCH="" PROJECT_ROOT="" TITLE="" PROMPT_FILE="" SETTLE_THREAD="" WAIT_SECONDS=900
 if [ "${1:-}" = "settle" ]; then SETTLE_THREAD="${2:?settle needs a threadId}"; shift 2; fi
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,6 +35,7 @@ while [ $# -gt 0 ]; do
     --model) MODEL="$2"; shift 2;;
     --worktree) WORKTREE="$2"; shift 2;;
     --branch) BRANCH="$2"; shift 2;;
+    --wait-seconds) WAIT_SECONDS="$2"; shift 2;;
     *) echo "unknown flag: $1" >&2; exit 2;;
   esac
 done
@@ -67,7 +73,23 @@ dispatch() { # $1 = json payload; prints http code, body to /tmp/t3-dispatch-res
 
 uuid() { python3 -c "import uuid;print(uuid.uuid4())"; }
 
+thread_status() { # prints the thread's session status (running/ready/stopped), or none
+  python3 - "$T3_HOME" "$1" <<'EOF'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1]+'/userdata/state.sqlite')
+row=c.execute("select status from projection_thread_sessions where thread_id=?",(sys.argv[2],)).fetchone()
+print(row[0] if row else 'none')
+EOF
+}
+
 if [ -n "$SETTLE_THREAD" ]; then
+  deadline=$(( $(date +%s) + WAIT_SECONDS ))
+  while [ "$(thread_status "$SETTLE_THREAD")" = "running" ]; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      echo "thread $SETTLE_THREAD still running after ${WAIT_SECONDS}s; not settled" >&2; exit 1
+    fi
+    sleep 15
+  done
   SETTLE="{\"type\":\"thread.settle\",\"commandId\":\"$(uuid)\",\"threadId\":\"$SETTLE_THREAD\"}"
   CODE=$(dispatch "$SETTLE")
   if [ "$CODE" = "401" ]; then mint_token; CODE=$(dispatch "$SETTLE"); fi

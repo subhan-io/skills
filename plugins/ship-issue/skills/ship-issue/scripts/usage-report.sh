@@ -32,6 +32,21 @@
 set -euo pipefail
 
 LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
+
+# Same walk-up as ledger.sh: the transcript dir is keyed by the session's starting
+# directory, which may be any ancestor of the run's cwd. Prints every ancestor's
+# transcript dir that exists, nearest first. The recorded claudeSession is looked
+# up across all of them; the window fallback uses only the nearest.
+claude_project_dirs() {
+  local d="$1" p
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    p="$HOME/.claude/projects/$(echo "$d" | sed 's|[/.]|-|g')"
+    ls "$p"/*.jsonl >/dev/null 2>&1 && echo "$p"
+    d="$(dirname "$d")"
+  done
+  return 0
+}
+
 SINCE="$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
 AS_JSON=false
 RUN=""
@@ -107,14 +122,19 @@ for i in $(seq 0 $((n - 1))); do
               and .claudeSession == $r.claudeSession and .start >= $r.start and .start <= $r.end)
               | {s: .start, e: .end}]' <<<"$runs")"
   if [ -n "$cwd" ]; then
-    proj_dir="$HOME/.claude/projects/$(echo "$cwd" | sed 's|[/.]|-|g')"
+    proj_dirs="$(claude_project_dirs "$cwd")"
+    proj_dir=""
+    [ -n "$claude_session" ] && proj_dir="$(for d in $proj_dirs; do [ -f "$d/$claude_session" ] && echo "$d" && break; done)"
     files="" join="none"
-    if [ -n "$claude_session" ] && [ -f "$proj_dir/$claude_session" ]; then
+    if [ -n "$proj_dir" ]; then
       files="$proj_dir/$claude_session"; join="session"
       sub_dir="$proj_dir/${claude_session%.jsonl}/subagents"
       [ -d "$sub_dir" ] && files="$files"$'\n'"$(find "$sub_dir" -name '*.jsonl' 2>/dev/null)"
-    elif [ -d "$proj_dir" ]; then
-      files="$(find "$proj_dir" -name '*.jsonl' -newermt "${start%Z}" 2>/dev/null)"; join="window"
+    elif [ -n "$proj_dirs" ]; then
+      # No exact session on record: the nearest dir alone, so a far ancestor's
+      # unrelated sessions (a session started in $HOME) do not count here.
+      nearest="$(echo "$proj_dirs" | head -1)"
+      files="$(find "$nearest" -name '*.jsonl' -newermt "${start%Z}" 2>/dev/null)"; join="window"
     fi
     if [ -n "$files" ]; then
       claude="$(echo "$files" \

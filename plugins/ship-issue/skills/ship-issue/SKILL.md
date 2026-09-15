@@ -48,6 +48,16 @@ the run merges its own PR. The rules that change:
   Anything short of green hands over as usual, unmerged.
 - The handover report (step 8) still happens in full — it is the only record the
   human gets.
+- **Under `ship-epic`** (the dispatch prompt says so): the PR opens against the
+  epic's integration branch, `epic/<n>`, and the merge above lands there. The base
+  branch is the human's, reached once by the epic's own PR. The handover goes up
+  as a comment on the issue, and it is the run's **last action**: after `run-end`
+  and `usage-report.sh`, so it carries the friction line, and followed only by
+  the same report in chat — no question, no further work. That comment is
+  `ship-epic`'s completion signal: on it the tick reads the outcome and settles
+  this thread, so anything the run does after posting happens in a thread already
+  marked done. A run that stops short posts the comment too, with what it found;
+  its thread stays unsettled for the human.
 
 ## The ledger
 
@@ -256,7 +266,8 @@ branch by itself and name it in the PR body; a gotcha that surfaces later in a
 review-fix session rides that round's commit.
 
 After the evidence gate, verify that cleanup returned the tree to the recorded
-HEAD, then push and run `gh pr create`. The body contains the issue link, confirmed
+HEAD, then push and run `gh pr create` — with `--base epic/<n>` when `ship-epic`
+named an integration branch. The body contains the issue link, confirmed
 criteria checklist, chunk summary and the evidence report. The PR is not open
 until this gate is complete.
 
@@ -286,8 +297,9 @@ test status, review outcomes, and anything open. Log `run-end`, then run
 `scripts/usage-report.sh --run <id>` and add its friction line to the report: Codex
 sessions that exited non-zero, verify failures, review rounds, and findings. A
 number that recurs across runs is a defect in a prompt or a script, not bad luck —
-name it when you see it, with the ledger row that shows it. Never merge — the human
-does.
+name it when you see it, with the ledger row that shows it. Under `ship-epic`, the
+same report is the issue comment described in AFK mode, posted last. Never merge —
+the human does.
 
 ## Under the Codex harness
 
