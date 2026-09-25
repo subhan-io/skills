@@ -12,7 +12,7 @@ code — you orchestrate, question, plan, and verify.
 
 - Let Codex read the repo; you read only what a decision in front of you requires.
 - One **fresh** Codex session per unit of work, through `scripts/run-codex.sh`
-  (`gpt-5.6-luna` at max reasoning effort; a model the human names goes in
+  (`gpt-6-luna` at max reasoning effort; a model the human names goes in
   `SHIP_ISSUE_CODEX_MODEL` and `SHIP_ISSUE_CODEX_EFFORT`). A resumed session
   replays its whole history every turn; the one sanctioned resume is the single
   follow-up in step 5.

@@ -18,7 +18,7 @@
 # workspace-write sandbox burns turns rediscovering each one. It reads CLAUDE.md as
 # its project doc.
 #
-# The model defaults to gpt-5.6-luna at max reasoning effort; override with
+# The model defaults to gpt-6-luna at max reasoning effort; override with
 # SHIP_ISSUE_CODEX_MODEL and SHIP_ISSUE_CODEX_EFFORT. Both are recorded on the
 # ledger event, so a session on the wrong model shows in the ledger row.
 #
@@ -29,7 +29,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 role="" issue="" index="" prompt_file="" out="" cd_dir="$PWD" resume="" run_id=""
-model="${SHIP_ISSUE_CODEX_MODEL:-gpt-5.6-luna}"
+model="${SHIP_ISSUE_CODEX_MODEL:-gpt-6-luna}"
 effort="${SHIP_ISSUE_CODEX_EFFORT:-max}"
 
 while [ $# -gt 0 ]; do
