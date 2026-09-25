@@ -68,7 +68,9 @@ codex_args=(--cd "$cd_dir" --sandbox danger-full-access \
 err_file="$(mktemp)"
 trap 'rm -f "$err_file"' EXIT
 if [ -n "$resume" ]; then
-  codex exec resume "$resume" "${codex_args[@]}" - < "$prompt_file" 2> >(tee "$err_file" >&2)
+  # --cd and --sandbox are `codex exec` options that `resume` rejects, so every
+  # option goes before the subcommand.
+  codex exec "${codex_args[@]}" resume "$resume" - < "$prompt_file" 2> >(tee "$err_file" >&2)
 else
   codex exec "${codex_args[@]}" - < "$prompt_file" 2> >(tee "$err_file" >&2)
 fi

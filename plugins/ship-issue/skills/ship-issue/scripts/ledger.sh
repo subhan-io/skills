@@ -70,6 +70,14 @@ for kv in "$@"; do
   kvs+=("$kv")
 done
 
+# Every step is one of four events; a step logged as its own event (e.g.
+# event=review-requested) is invisible to usage-report.sh.
+case "$event" in
+  run-start|run-end|phase|codex) ;;
+  *) echo "ledger.sh: unknown event '$event' (allowed: run-start run-end phase codex)" >&2
+     exit 1 ;;
+esac
+
 # Only the phases the SKILL defines may be logged; an improvised phase name is a
 # step the skill doesn't have, and it breaks usage-report.sh's per-step attribution.
 if [ "$event" = "phase" ]; then

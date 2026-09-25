@@ -28,7 +28,9 @@
 #     subtracted from the outer run, so the tick row shows only the tick's own
 #     turns.
 #   - Phase events (event=phase) are listed per run in --json output.
-# A run with no run-end is reported as open, window capped at now.
+# A run with no run-end is reported as open, window capped at now. Once it is a
+# day old it is reported as abandoned instead, its window ending at its last
+# event, so a dead run neither reads as live nor absorbs later sessions.
 set -euo pipefail
 
 LEDGER="${SHIP_ISSUE_LEDGER:-$HOME/.local/state/ship-issue/ledger.jsonl}"
@@ -75,7 +77,12 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
                 | select(if ($s.run // "") != "" and (.run // "") != ""
                          then .run == $s.run
                          else (.issue|tostring) == ($s.issue|tostring) and .ts >= $s.ts end)]
-         | first) as $e
+         | first) as $e0
+      | (($now | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime)
+         - ($s.ts | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime) > 86400) as $stale
+      | (if $e0 == null and $stale and ($s.run // "") != ""
+         then {ts: ([$ev[] | select(.run == $s.run) | .ts] | max), outcome: "abandoned"}
+         else $e0 end) as $e
       | ([$ev[] | select(.event == "codex") | select(belongs($s; $e))]) as $cx
       | ($cx | map(select((.sessionId // "") != ""))
              | group_by(.sessionId)
@@ -124,7 +131,7 @@ for i in $(seq 0 $((n - 1))); do
   if [ -n "$cwd" ]; then
     proj_dirs="$(claude_project_dirs "$cwd")"
     proj_dir=""
-    [ -n "$claude_session" ] && proj_dir="$(for d in $proj_dirs; do [ -f "$d/$claude_session" ] && echo "$d" && break; done)"
+    [ -n "$claude_session" ] && proj_dir="$(for d in $proj_dirs; do [ -f "$d/$claude_session" ] && echo "$d" && break; done || true)"
     files="" join="none"
     if [ -n "$proj_dir" ]; then
       files="$proj_dir/$claude_session"; join="session"

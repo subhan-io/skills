@@ -17,8 +17,9 @@ Two things belong to the epic rather than to any one sub-issue:
   sub-issue branches from its tip, opens its PR against it, and merges into it,
   so parallel sub-issues never need a rebase. The human merges `epic/<n>` into
   the base branch once, as the feature's PR.
-- **A database.** One database per (app, epic), shared by every sub-issue, so
-  migrations compose and are proven in order without touching the dev database.
+- **Scratch databases.** One per (app, sub-issue), built from the sub-issue's
+  branch, so its migrations run in order on top of everything merged into
+  `epic/<n>`, without touching the dev database.
 
 With `afk` in the invocation, each pick instead runs as its own dispatched t3
 thread in `ship-issue` AFK mode, with a sidebar thread and live transcript. AFK
@@ -32,8 +33,10 @@ after the human has handled the checkpoint.
 
 The epic body is the tick's memory. Its build order lives there, and so does a
 status block between `<!-- ship-epic:status -->` markers that step 5 rewrites whole
-at the end of every tick. Read the block first: it is the last tick's table, and
-the survey below refreshes it rather than rebuilding it.
+at the end of every tick. From the block, take the build order and the notes on
+what is parked or waits on the human. Its PR and CI states were true when the
+last tick wrote them: re-query every one below (a tick once reported a PR green
+that had since failed typecheck).
 
 Start the tick's ledger run and keep the id: it stamps the tick's own Codex
 sessions (step 4) and the run-end in step 5. `<ship-issue>` below is the sibling
@@ -85,8 +88,8 @@ unmerged is a wait, not a branch to build on: the pick starts once it lands,
 from a tip that holds the blocker's finished work. Independent sub-issues are
 eligible together. If none qualifies, report what each remaining sub-issue
 waits on (a blocker's merge, a review, a human answer) and stop the attended
-tick. In AFK mode, keep polling any PR still open against `epic/<n>`; absence of
-a new pick is not a stopping condition while a run is in flight.
+tick. In AFK mode, absence of a new pick is not a stopping condition while a
+run is in flight: wait for it (step 3).
 
 ## 3. Ship
 
@@ -97,26 +100,29 @@ branch. The pick's PR opens with `--base epic/<n>`; name that base to
 `ship-issue` — in the invocation for an attended run, in the prompt file for an
 AFK one — and it passes it to `gh pr create`.
 
-**Database.** Skip this when no sub-issue of the epic touches the schema or
-needs real data. Otherwise every sub-issue of the epic shares one database, so
-sub-issue B's migration applies on top of sub-issue A's and an ordering conflict
-surfaces while the branch is still open:
+**Database.** Skip this when the sub-issue does not touch the schema or need
+real data. Otherwise give it its own database, built from its worktree:
 
 ```bash
-url_file=$(scripts/epic-db.sh --repo <repo> --app <app> --epic <n>)
+url_file=$(scripts/epic-db.sh --repo <worktree> --app <app> --epic <n> --issue <sub-issue>)
 ```
 
 It creates the database if it is absent, applies the schema, seeds it, and
 prints the path of a 0600 file holding the connection string. Pass that path
 into the run's Codex prompts — `DATABASE_URL="$(cat <url_file>)"` — and never
 the URL itself, which would put a password in the transcript and in issue
-comments. Re-run the script before each chunk; it is create-if-missing, so the
-call is cheap and it picks up the migrations the previous sub-issue added.
+comments. Re-run the script before each chunk; it picks up the migrations the
+chunk added. When the schema fails to apply to an existing database, the script
+rebuilds it once by itself, so a failure it reports is a real migration error:
+route it to Codex, and never repair the database by hand.
 
-The database is a pgmanager `pr`-env database numbered `epic + 9000`, one per
-app — so this step needs a repository with an `apps/<app>` layout and a
-pgmanager project per app. When a bad migration poisons it, `--recreate`
-rebuilds it from migrations and seed.
+Concurrent sub-issues must not share a database. Branches with different
+migration sets applying to one database left drizzle's journal out of step with
+the tables on epic #616, and two runs lost time repairing it by hand.
+
+The database is a pgmanager `scratch` database keyed `epic<n>_<sub-issue>`,
+leased for 7 days — so this step needs a repository with an `apps/<app>` layout
+and a pgmanager project per app. Extensions come from the app's CI workflow.
 
 Seed data comes from the app's own `db:seed` or `e2e:seed` script, never a dump,
 which cannot survive a migration. It must be idempotent, with fixed ids and
@@ -164,11 +170,21 @@ run merges its own PR into `epic/<n>`; the base branch stays the human's.
   run**; the same holds for every Agent-tool subagent either skill spawns. Name
   the model in chat as you dispatch, and keep the threadId the script prints
   beside the issue number for the rest of the run.
-- The issue comment is the completion signal and the report channel: poll it
-  (and the ledger's `run-end`) at a few-minute interval for the outcome. A pick
-  is review-ready only when its full verification and evidence gates passed,
-  its Codex review settled with no valid finding left unresolved, and required
-  PR checks are green; the run merges on that test and nothing weaker.
+- The issue comment is the completion signal and the report channel. Wait for
+  it with one backgrounded call (`run_in_background`) that covers every run in
+  flight, not a turn per poll:
+
+  ```bash
+  scripts/epic-wait.sh --repo <owner/name> <issue>@<dispatch-time> ...
+  ```
+
+  It exits when at least one has posted, printing `done issue=<n>
+  outcome=<run-end outcome> comment=<url>` per finished run; exit 4 is its
+  timeout, so read the threads and wait again. Do not chain ScheduleWakeup
+  calls: T3 stops a session idle for 30 minutes. A pick is review-ready only
+  when its full verification and evidence gates passed, its last Codex review
+  round found nothing valid, and its head commit's required checks ran and
+  passed; the run merges on that test and nothing weaker.
 - **Settle the thread once its handoff is complete.** When the comment is up and
   the ledger holds the run's `run-end` with `outcome=merged`, clear the thread's
   attention marker:
@@ -265,8 +281,8 @@ End every tick by rewriting the epic's status block: the table from step 1,
 refreshed — what merged into `epic/<n>`, what is parked for an attended tick,
 what waits on the human, what the next tick will pick up — then the branch as
 `scripts/epic-branch.sh status` prints it (drift from the base, PRs merged and
-open against it, the epic PR), and the epic database with whether this tick
-migrated it. Write it to a file and replace the block in the body:
+open against it, the epic PR). Write it to a file and replace the block in the
+body:
 
 ```bash
 scripts/epic-status.sh --repo <repo> --epic <n> --file <status.md>
