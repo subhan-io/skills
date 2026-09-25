@@ -16,13 +16,21 @@
 # The session runs with full access (danger-full-access) — the worktree's real git
 # dir, package caches, and the docker socket all live outside the cwd, and a
 # workspace-write sandbox burns turns rediscovering each one. It reads CLAUDE.md as
-# its project doc. The model's final message lands in --out; a usage event (session id, duration,
+# its project doc.
+#
+# The model defaults to gpt-5.6-luna at max reasoning effort; override with
+# SHIP_ISSUE_CODEX_MODEL and SHIP_ISSUE_CODEX_EFFORT. Both are recorded on the
+# ledger event, so a session on the wrong model shows in the ledger row.
+#
+# The model's final message lands in --out; a usage event (session id, duration,
 # token totals from the rollout file) is appended to the ledger via ledger.sh; one
 # small JSON run record is printed for the orchestrator.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 role="" issue="" index="" prompt_file="" out="" cd_dir="$PWD" resume="" run_id=""
+model="${SHIP_ISSUE_CODEX_MODEL:-gpt-5.6-luna}"
+effort="${SHIP_ISSUE_CODEX_EFFORT:-max}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -53,6 +61,7 @@ fi
 start_epoch=$(date +%s)
 
 codex_args=(--cd "$cd_dir" --sandbox danger-full-access \
+  -m "$model" -c "model_reasoning_effort=\"$effort\"" \
   -c 'project_doc_fallback_filenames=["CLAUDE.md"]' \
   --output-last-message "$out")
 
@@ -100,6 +109,7 @@ error=""
 
 "$SCRIPT_DIR/ledger.sh" event=codex "role=$role" "issue=$issue" "index=$index" \
   "run=$run_id" "cwd=$cd_dir" "sessionId=$session_id" "resumed=${resume:+true}" \
+  "model=$model" "effort=$effort" \
   "exitCode=$exit_code" "durationSec=$duration" "tokens=$tokens_json" \
   "error=$error" || true
 

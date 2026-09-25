@@ -9,7 +9,7 @@
 # The thread's model defaults to claude-sonnet-5. Never default a dispatched
 # thread or subagent to Fable: a #640 AFK run on claude-fable-5 read 7.9M cache
 # tokens in 30 minutes, four times the deep-tier Opus planner. Pass --model
-# claude-fable-5 only when the human asked for Fable on that run.
+# claude-fable-5-1 only when the human asked for Fable on that run.
 #   t3-dispatch.sh settle <threadId> [--wait-seconds 900]
 #
 # `settle` clears the thread's attention marker once its handoff is complete. It
