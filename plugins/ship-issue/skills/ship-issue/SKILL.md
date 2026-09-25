@@ -8,9 +8,13 @@ description: Ship one GitHub issue or adhoc task to a finished PR — tiered pla
 One issue in, one finished PR out. The human merges; you never do. Codex writes all
 code — you orchestrate, question, plan, and verify.
 
-**Cost on both subscriptions is turns × context.** That buys three standing rules:
+**Cost on both subscriptions is turns × context.** That buys four standing rules:
 
 - Let Codex read the repo; you read only what a decision in front of you requires.
+- Codex makes every change to the repository. You write only `run-state.md`,
+  prompts, PR and issue text, and `repo-notes.md`; any other edit, however small,
+  is a `run-codex.sh --role fix` session. Code you edit yourself stays in your
+  context for every later turn of the run.
 - One **fresh** Codex session per unit of work, through `scripts/run-codex.sh`
   (`gpt-6-luna` at max reasoning effort; a model the human names goes in
   `SHIP_ISSUE_CODEX_MODEL` and `SHIP_ISSUE_CODEX_EFFORT`). A resumed session
@@ -44,9 +48,15 @@ the run merges its own PR. The rules that change:
   3 chunks still becomes a split proposal, reported back, never executed.
   **Step 5**: a handoff that says `replan` stops the run — fail closed, report what
   the chunk found.
-- **Merge**: after the review round settles and the PR is green, merge it —
+- **Review**: the last review round before the merge must find nothing valid.
+  When round two's fixes land, run round three; a valid finding in round three
+  stops the run unmerged.
+- **Merge**: when that round has settled and the PR is green, merge it —
   `gh pr merge <n> --squash --delete-branch` — and log `run-end outcome=merged`.
-  Anything short of green hands over as usual, unmerged.
+  Green means the head commit has a GitHub Actions check suite and every required
+  check on it passed. An empty check list right after a push means CI has not
+  started yet (it can take ten minutes), not that it passed. Anything short of
+  green hands over as usual, unmerged.
 - The handover report (step 8) still happens in full — it is the only record the
   human gets.
 - **Under `ship-epic`** (the dispatch prompt says so): the PR opens against the
@@ -161,7 +171,11 @@ carries, goes through the `plan-explainer` skill.
 
 Split the work into sequential chunks, each sized so a single Codex session stays
 inside ~300k tokens. Every chunk states the files/areas it touches, its
-deliverable, and a verify command that proves the chunk landed.
+deliverable, and a verify command that proves the chunk landed. The verify
+command runs every check the touched app's CI runs — read the workflow files, do
+not assume lint, typecheck and test cover them. A check that CI runs and the
+verify skips fails only after the PR opens (#553: a separate `lint:anti-slop`
+gate caught 52 warnings that three chunks and two review rounds missed).
 
 **A plan of more than 3 chunks is a split proposal, not a plan.** Draft sub-issues
 along the plan's seams — each independently shippable and verifiable, criteria
@@ -197,8 +211,9 @@ input to the final gate; the orchestrator still owns that gate.
 
 Write the ownership split into every prompt: Codex runs with full access, so it
 runs every check that gates its chunk — typecheck, unit tests, lint, docker-backed
-suites — and reports their output; the commit and the ledger stay yours, so tell
-it to leave all changes unstaged for you to commit. Then:
+suites — and reports their output; the commit stays yours, so tell it to leave
+all changes unstaged for you to commit. Do not mention the ledger in a prompt: a
+session told about it once refused to work until it could write there. Then:
 
 ```bash
 scripts/run-codex.sh --role chunk --issue <n> --index <i> --run <runId> \
@@ -248,7 +263,7 @@ named an integration branch. The body contains the issue link, confirmed
 criteria checklist, chunk summary and the evidence report. The PR is not open
 until this gate is complete.
 
-## 7. Review — one round, two max
+## 7. Review — one round, two max (three in AFK)
 
 Before requesting anything: run the repo's lint and anti-slop checks yourself and
 reread the diff against `anti-slop.md` — every finding you catch here is a review
@@ -263,7 +278,13 @@ review fixes (one fresh session covers the round's fixes), push, and refresh any
 shots the fixes changed; invalid ones get a reply tagged `(resolver, round N)`
 with the evidence. A second round runs only for
 deep tier, or when round one produced a fix that changed behavior. At two rounds,
-stop and hand over what is outstanding.
+stop and hand over what is outstanding; AFK mode runs a third (see AFK mode).
+
+A valid finding that states a rule for the whole repo, not a one-off bug, goes into
+`repo-notes.md` in the round's fix commit, worded as the rule: "a worker job can be
+delivered twice, so its side effects must be idempotent", not "fixed double insert
+in apify.ts". Every later chunk prompt carries the notes, so the implementer meets
+the rule before review has to.
 
 ## 8. Hand over
 
