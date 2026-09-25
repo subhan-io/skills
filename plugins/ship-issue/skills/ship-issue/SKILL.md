@@ -41,7 +41,7 @@ the run merges its own PR. The rules that change:
 - **Gate 1**: derive the criteria from the issue; log them in the run-start report
   instead of asking. **Step 3**: an open question with no answer in the issue is an
   eligibility failure, not a guess. **Gate 2**: self-approve the plan; a plan past
-  2 chunks still becomes a split proposal, reported back, never executed.
+  3 chunks still becomes a split proposal, reported back, never executed.
   **Step 5**: a handoff that says `replan` stops the run — fail closed, report what
   the chunk found.
 - **Merge**: after the review round settles and the PR is green, merge it —
@@ -160,10 +160,10 @@ carries, goes through the `plan-explainer` skill.
 ## 4. Plan → present — gate
 
 Split the work into sequential chunks, each sized so a single Codex session stays
-inside ~150–200k tokens. Every chunk states the files/areas it touches, its
+inside ~300k tokens. Every chunk states the files/areas it touches, its
 deliverable, and a verify command that proves the chunk landed.
 
-**A plan of more than 2 chunks is a split proposal, not a plan.** Draft sub-issues
+**A plan of more than 3 chunks is a split proposal, not a plan.** Draft sub-issues
 along the plan's seams — each independently shippable and verifiable, criteria
 carried verbatim plus a "criteria and approach approved in the #<n> split" note —
 and present the split at this gate instead. On approval: create the children, mark

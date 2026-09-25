@@ -95,7 +95,7 @@ pr-media-upload plugins for their corresponding branches.
 ### ship-issue
 
 Confirms acceptance criteria and a planning tier, plans inline
-(dispatching an Opus planner only for deep work), proposes an issue split past two chunks,
+(dispatching an Opus planner only for deep work), proposes an issue split past three chunks,
 implements each chunk in a fresh Codex session via `scripts/run-codex.sh`, and runs one Codex
 review round. Every Codex session ends with a `handoff.md` message whose *Remaining plan
 impact* line lets a chunk adjust or void the plan behind it; the orchestrator keeps a rewritten
