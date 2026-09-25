@@ -10,11 +10,12 @@ code — you orchestrate, question, plan, and verify.
 
 **Cost on both subscriptions is turns × context.** That buys three standing rules:
 
-- Let Codex read the repo; you read only what a decision in front of you requires,
-  and batch independent tool calls into one message.
-- One **fresh** Codex session per unit of work, through `scripts/run-codex.sh`. A
-  resumed session replays its whole history every turn; the one sanctioned resume is
-  the single follow-up in step 5.
+- Let Codex read the repo; you read only what a decision in front of you requires.
+- One **fresh** Codex session per unit of work, through `scripts/run-codex.sh`
+  (`gpt-6-luna` at max reasoning effort; a model the human names goes in
+  `SHIP_ISSUE_CODEX_MODEL` and `SHIP_ISSUE_CODEX_EFFORT`). A resumed session
+  replays its whole history every turn; the one sanctioned resume is the single
+  follow-up in step 5.
 - The deep-tier planner (step 4) is the only subagent this skill dispatches, on
   `model: opus`. **Never run a subagent or dispatched thread on Fable unless the
   human explicitly asked for Fable on that run.** A Fable orchestrator loop costs
@@ -40,7 +41,7 @@ the run merges its own PR. The rules that change:
 - **Gate 1**: derive the criteria from the issue; log them in the run-start report
   instead of asking. **Step 3**: an open question with no answer in the issue is an
   eligibility failure, not a guess. **Gate 2**: self-approve the plan; a plan past
-  2 chunks still becomes a split proposal, reported back, never executed.
+  3 chunks still becomes a split proposal, reported back, never executed.
   **Step 5**: a handoff that says `replan` stops the run — fail closed, report what
   the chunk found.
 - **Merge**: after the review round settles and the PR is green, merge it —
@@ -49,15 +50,10 @@ the run merges its own PR. The rules that change:
 - The handover report (step 8) still happens in full — it is the only record the
   human gets.
 - **Under `ship-epic`** (the dispatch prompt says so): the PR opens against the
-  epic's integration branch, `epic/<n>`, and the merge above lands there. The base
-  branch is the human's, reached once by the epic's own PR. The handover goes up
-  as a comment on the issue, and it is the run's **last action**: after `run-end`
-  and `usage-report.sh`, so it carries the friction line, and followed only by
-  the same report in chat — no question, no further work. That comment is
-  `ship-epic`'s completion signal: on it the tick reads the outcome and settles
-  this thread, so anything the run does after posting happens in a thread already
-  marked done. A run that stops short posts the comment too, with what it found;
-  its thread stays unsettled for the human.
+  epic's integration branch, `epic/<n>`, and the merge above lands there. The
+  handover goes up as a comment on the issue as the run's **last action**, after
+  `run-end` and `usage-report.sh`: `ship-epic` settles this thread when the
+  comment appears. A run that stops short posts the comment too.
 
 ## The ledger
 
@@ -164,10 +160,10 @@ carries, goes through the `plan-explainer` skill.
 ## 4. Plan → present — gate
 
 Split the work into sequential chunks, each sized so a single Codex session stays
-inside ~150–200k tokens. Every chunk states the files/areas it touches, its
+inside ~300k tokens. Every chunk states the files/areas it touches, its
 deliverable, and a verify command that proves the chunk landed.
 
-**A plan of more than 2 chunks is a split proposal, not a plan.** Draft sub-issues
+**A plan of more than 3 chunks is a split proposal, not a plan.** Draft sub-issues
 along the plan's seams — each independently shippable and verifiable, criteria
 carried verbatim plus a "criteria and approach approved in the #<n> split" note —
 and present the split at this gate instead. On approval: create the children, mark
@@ -188,13 +184,11 @@ approval, log `event=phase phase=plan-approved`.
 
 ## 5. Implement — one fresh Codex session per chunk
 
-For each chunk, in order: draft the prompt with the `codex:gpt-5-4-prompting`
-skill — the chunk's spec, its criteria, its verify command, the epic context and
-repo notes when they exist, the path of `run-state.md` and of the previous session's
-handoff — and always append `anti-slop.md` then `handoff.md` (both in this skill's
-directory). `handoff.md` fixes the shape of the session's final message; the
-orchestrator reads that message, so a prompt without it produces a summary you
-cannot act on.
+For each chunk, in order, write the prompt: the chunk's spec, its criteria, its
+verify command, the epic context and repo notes when they exist, the path of
+`run-state.md` and of the previous session's handoff. Always append `anti-slop.md`
+then `handoff.md` (both in this skill's directory); `handoff.md` fixes the shape of
+the final message you act on.
 For a chunk touching anything a user sees, paste the complete loaded
 `ui-evidence` content into the prompt under a `UI evidence contract` heading and
 make published screenshots part of the deliverable. Do not launch a UI chunk
@@ -228,9 +222,6 @@ before anything else runs:
   plan that keeps the approved scope and criteria continues once it is in
   `run-state.md`; one that changes either is a new gate 2 and goes to the human.
 
-Planning does not end at gate 2: each handoff is the planner's next input, and a
-plan that never moves after the first chunk was never checked against the code.
-
 ## 6. Full test pass, evidence gate, then the PR
 
 Run the repo's full test suite; failures go back to Codex as fresh `--role fix`
@@ -239,24 +230,10 @@ record `git rev-parse HEAD`; UI evidence must render that commit. A temporary
 uncommitted harness may sit on top of it only as allowed by `ui-evidence`, and
 must be removed before push.
 
-For every user-visible change, reload the complete `ui-evidence` skill immediately
-before capture and load `pr-media-upload`. The orchestrator executes the capture
-itself even when a chunk returned candidate shots. Its evidence report must name:
-
-- the captured HEAD;
-- the real-route result, including the preview command's reported database mode
-  and the observed application-auth result;
-- the sanctioned scratch-data route result or its precise unavailability;
-- the production-shell fixture-harness result or why it would render inaccurate
-  pixels;
-- the published URLs, or an `un-capturable:` conclusion supported by all three
-  route results.
-
-Resolve contradictions from command and browser output before completing the
-report; a conversational guess about the database is not evidence. Component,
-integration and end-to-end tests support behavioral claims but never substitute
-for visible pixels. An `un-capturable:` conclusion that omits a route is an
-incomplete gate, so continue capture or stop the run.
+For every user-visible change, load `pr-media-upload` and run the capture
+yourself, even when a chunk returned candidate shots. The result is the evidence
+report `ui-evidence` defines, for the recorded HEAD. A report missing a field is an
+incomplete gate: continue capture or stop the run.
 
 Before the PR, harvest the handoffs' *Repo gotchas*. A fact a future run should
 know goes into `<repo>/.claude/ship-issue/repo-notes.md`, folded into the section
@@ -275,15 +252,13 @@ until this gate is complete.
 
 Before requesting anything: run the repo's lint and anti-slop checks yourself and
 reread the diff against `anti-slop.md` — every finding you catch here is a review
-round you don't pay for. Findings the reviewer would raise are cheapest fixed
-before it ever looks.
+round you don't pay for.
 
 Then log `event=phase phase=review-requested round=<n>`, run one round with the
 `codex-review` skill, and log `phase=review-settled round=<n>` when it lands.
-Triage its findings yourself — read the code each one points at and decide from
-the code, not the finding's confidence; a triage that waves everything through is
-a rubber stamp, and some findings *are* wrong. Valid ones go to a **fresh**
-`run-codex.sh --role review-fix` session — never `--resume` the chunk session for
+Triage its findings yourself: decide each from the code it points at, not from
+the finding's confidence. Valid ones go to a **fresh** `run-codex.sh --role
+review-fix` session — never `--resume` the chunk session for
 review fixes (one fresh session covers the round's fixes), push, and refresh any
 shots the fixes changed; invalid ones get a reply tagged `(resolver, round N)`
 with the evidence. A second round runs only for
@@ -303,18 +278,8 @@ the human does.
 
 ## Under the Codex harness
 
-The native Codex plugin exposes this skill as `/ship-issue`. The same steps
-apply, with three adaptations:
-
-- Where a step says AskUserQuestion, ask as a short numbered list in plain text and
-  wait for the reply.
-- Where a step backgrounds `codex-wait.sh watch`, poll `codex-wait.sh status <pr>`
-  at a few-minute interval instead.
-- Chunks still run as separate sessions through `scripts/run-codex.sh` — the
-  orchestrating session's own turn count and context stay small, and the ledger
-  stays per-chunk.
-
-The companion skills (`plan-explainer`, `ui-evidence`, `codex-review`,
-`pr-media-upload`) are fellow plugins from this marketplace; where the harness does
-not surface one as an invocable skill, read its `SKILL.md` from the installed
-plugin and follow it directly.
+The native Codex plugin exposes this skill as `/ship-issue`. The steps are the
+same, and chunks still run as separate sessions through `scripts/run-codex.sh`.
+Where the harness does not surface a companion skill (`plan-explainer`,
+`ui-evidence`, `codex-review`, `pr-media-upload`) as invocable, read its
+`SKILL.md` from the installed plugin and follow it.

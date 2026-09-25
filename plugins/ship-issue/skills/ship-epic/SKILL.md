@@ -14,12 +14,9 @@ unchanged inside each run.
 Two things belong to the epic rather than to any one sub-issue:
 
 - **An integration branch.** `epic/<n>`, forked from the base branch. Every
-  sub-issue branches from its tip and opens its PR against it, and a finished
-  sub-issue merges into it. Parallel sub-issues are then ordinary siblings of one
-  branch — nothing to rebase when one of them merges — and a sub-issue that
-  depends on two others branches from the tip once both are in. The base branch
-  never sees a sub-issue on its own: the human merges `epic/<n>` into it once, as
-  the feature's PR.
+  sub-issue branches from its tip, opens its PR against it, and merges into it,
+  so parallel sub-issues never need a rebase. The human merges `epic/<n>` into
+  the base branch once, as the feature's PR.
 - **A database.** One database per (app, epic), shared by every sub-issue, so
   migrations compose and are proven in order without touching the dev database.
 
@@ -47,8 +44,6 @@ tick=$(<ship-issue>/scripts/ledger.sh event=run-start issue=epic-<n> tier=epic c
 ```
 
 Pass `cwd` so the tick's own Claude session and model are on record.
-`usage-report.sh` subtracts any sub-issue run that starts inside the tick in the
-same session, so an attended tick does not count its sub-issue's cost twice.
 
 Make sure the integration branch exists and carries the base branch's latest:
 
@@ -120,21 +115,16 @@ call is cheap and it picks up the migrations the previous sub-issue added.
 
 The database is a pgmanager `pr`-env database numbered `epic + 9000`, one per
 app — so this step needs a repository with an `apps/<app>` layout and a
-pgmanager project per app. An epic that touches two apps gets one per app. When a bad migration
-poisons it, `--recreate` rebuilds it from migrations and seed in one command —
-so nothing in it is ever precious, and nothing needs hand repair.
+pgmanager project per app. When a bad migration poisons it, `--recreate`
+rebuilds it from migrations and seed.
 
-Seed data is the app's own `db:seed` or `e2e:seed` script, not a fixture this
-skill invents and not a database dump — a dump cannot survive a migration. It
-must be idempotent and deterministic, with fixed ids and emails, because it
-re-runs after every migration and because stable ids keep `ui-evidence`
-screenshots comparable across sub-issues. Keep it thin: one user per auth role
-and one row per core entity, enough to exercise the foreign keys and the states
-the epic touches. No volume data, and no realistic-looking personal data. When
-the app has no seed script, the epic's first sub-issue writes one — it is a
-repository asset, not scaffolding for this skill. Rows the epic needs beyond
-that baseline go in an overlay the first sub-issue adds and later sub-issues
-extend; that overlay is what makes a backfill testable.
+Seed data comes from the app's own `db:seed` or `e2e:seed` script, never a dump,
+which cannot survive a migration. It must be idempotent, with fixed ids and
+emails: it re-runs after every migration, and stable ids keep `ui-evidence`
+screenshots comparable across sub-issues. Keep it to one user per auth role and
+one row per core entity, with no realistic personal data. When the app has no
+seed script, the epic's first sub-issue writes one as a repository asset; rows
+the epic needs beyond that baseline go in an overlay later sub-issues extend.
 
 **Epic context.** Every run under this epic gets the same block, built once per
 tick and handed to `ship-issue` — in your own context for an attended run, in the
@@ -169,17 +159,11 @@ run merges its own PR into `epic/<n>`; the base branch stays the human's.
     --prompt-file <f> --worktree <worktree> --branch <branch> --model claude-sonnet-5
   ```
 
-  The dispatched thread is the run's orchestrator, and it runs on Sonnet.
-  **Never dispatch on Fable unless the human asked for Fable on that run**: the
-  orchestrator loop is turns × context, and one Fable AFK run cost more than the
-  rest of its tick combined. The same rule holds for every Agent-tool subagent
-  either skill spawns. Say the model in chat as you dispatch, one line:
-  `Dispatching ship-issue #640 as a t3 thread on claude-sonnet-5`. The script
-  prints the same line to stderr.
-
-  It prints the created threadId; keep it beside the issue number for the rest
-  of the run. First use pairs with the local t3 server and caches a bearer under
-  `~/.local/state/ship-issue/`.
+  The dispatched thread is the run's orchestrator and runs on Sonnet, the
+  script's default. **Never pass Fable unless the human asked for Fable on that
+  run**; the same holds for every Agent-tool subagent either skill spawns. Name
+  the model in chat as you dispatch, and keep the threadId the script prints
+  beside the issue number for the rest of the run.
 - The issue comment is the completion signal and the report channel: poll it
   (and the ledger's `run-end`) at a few-minute interval for the outcome. A pick
   is review-ready only when its full verification and evidence gates passed,
@@ -193,20 +177,14 @@ run merges its own PR into `epic/<n>`; the base branch stays the human's.
   scripts/t3-dispatch.sh settle <threadId>
   ```
 
-  The script waits for the thread's turn to end before settling, since a turn
-  that ends afterwards re-marks the thread. The marker means "a human must look
-  here", and a merged run has nothing left to look at: its report is on the
-  issue and its work is in `epic/<n>`. A run that stopped short —
+  The script waits for the thread's turn to end first. A run that stopped short —
   `outcome=stopped` or `pr-open`, not-AFK-eligible, a failed gate — keeps its
   thread unsettled: the marker is the sidebar's record that it needs a human,
   and its transcript is where they read why.
-- Independent picks may run concurrently, **three in flight by default** — a
-  run is in flight from dispatch until its issue comment lands. Three is a
-  guess, not a measurement: the box also builds and serves, and nothing has yet
-  shown where it saturates. Change it in the invocation (`afk 4`) and read the
-  ledger's run durations against the overlap before a new number becomes the
-  default. A dependent pick waits until its blocker has merged into `epic/<n>`
-  before branching. Never dispatch past the AFK run's `hitl` horizon.
+- Independent picks may run concurrently, **three in flight by default**
+  (`afk 4` in the invocation changes it); a run is in flight from dispatch until
+  its issue comment lands. A dependent pick waits until its blocker has merged
+  into `epic/<n>` before branching. Never dispatch past the AFK run's `hitl` horizon.
 - A run that reports not-AFK-eligible (deep tier, unanswerable question) parks
   its sub-issue for an attended tick — never retry it AFK.
 
@@ -244,14 +222,11 @@ and `handoff.md` from the `ship-issue` skill directory, then:
 Read the handoff. A pushed, verified merge is followed by `sync` again, which
 now prints nothing. A handoff that reports both sides changed one contract
 incompatibly is an escalation: leave the branch where the script left it and
-take it to the human. Only a pushed merge counts — the next `sync` resets the
-worktree to what origin holds, so a merge that never reached the remote is
-redone, not believed.
+take it to the human. Only a pushed merge counts: the next `sync` resets the
+worktree to what origin holds.
 
-A sub-issue PR that opened before a sync is behind `epic/<n>`. That is an
-ordinary PR whose base moved: its diff stays its own and CI runs on the merge
-result. A conflict there belongs to the sub-issue's run, in a fresh `--role fix`
-session before its merge, not to the tick.
+A conflict in a sub-issue PR opened before a sync belongs to that sub-issue's
+run, in a fresh `--role fix` session before its merge, not to the tick.
 
 ## 5. Continue or report
 

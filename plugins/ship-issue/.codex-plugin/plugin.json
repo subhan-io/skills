@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Ship Issue",
     "shortDescription": "Take one issue to a finished PR with Codex.",
-    "longDescription": "Confirm acceptance criteria and a planning tier, resolve questions visually, plan in token-sized chunks (proposing an issue split past two chunks), implement each chunk in a fresh Codex session, run tests, open a PR, and run one Codex review round — logging every session's token usage to a ledger. The human approves the plan and makes the merge.",
+    "longDescription": "Confirm acceptance criteria and a planning tier, resolve questions visually, plan in token-sized chunks (proposing an issue split past three chunks), implement each chunk in a fresh Codex session, run tests, open a PR, and run one Codex review round — logging every session's token usage to a ledger. The human approves the plan and makes the merge.",
     "developerName": "Subhan Mahmood",
     "category": "Developer Tools",
     "capabilities": ["GitHub", "Codex", "Planning"],
