@@ -96,14 +96,15 @@ pr-media-upload plugins for their corresponding branches.
 Confirms acceptance criteria and a planning tier, plans inline
 (dispatching an Opus planner only for deep work), proposes an issue split when the parts ship
 independently, implements each chunk in a fresh Sonnet implementer subagent, and runs up to two
-Codex GitHub review rounds (round 1 fixes P0–P2, round 2 fixes P0–P1, no third). Every implementer ends with a `handoff.md` message whose *Remaining plan
+Codex adversarial review rounds (round 1 fixes critical–medium, round 2 fixes critical–high, no third). Every implementer ends with a `handoff.md` message whose *Remaining plan
 impact* line lets a chunk adjust or void the plan behind it; the orchestrator keeps a rewritten
 `run-state.md` scratchpad under `~/.local/state/ship-issue/issue-<n>/` and folds each run's
 repo gotchas into `<repo>/.claude/ship-issue/repo-notes.md` for the next one. Every run
 writes events to `~/.local/state/ship-issue/ledger.jsonl`; `scripts/usage-report.sh` joins
 them with the session transcripts, subagents included, to report cost and friction per run.
-Claude Code only, since implementers are Agent-tool subagents. Uses the plan-explainer,
-ui-evidence, and codex-review plugins — install those alongside it.
+Claude Code only, since implementers are Agent-tool subagents. Uses the plan-explainer and
+ui-evidence plugins and OpenAI's `codex` Claude Code plugin (`/codex:adversarial-review`) —
+install those alongside it.
 
 The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues. The
 epic builds on an integration branch, `epic/<n>`: every sub-issue branches from it and opens
