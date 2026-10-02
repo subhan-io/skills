@@ -167,7 +167,7 @@ case "$CMD" in
     jq -n --argjson pr "$PR" --arg head "$head" --arg bot "$CODEX_BOT" --argjson all "$ALL" \
       --argjson reviews "$reviews" --argjson comments "$comments" --argjson ic "$issue_comments" '
       # Codex badge priorities mapped onto a plain severity scale for the resolver.
-      def sev: if . == "1" then "blocker" elif . == "2" then "major" else "note" end;
+      def sev: if . == "0" or . == "1" then "blocker" elif . == "2" then "major" else "note" end;
       # Replies live in the same collection, pointing back at the finding they answer. Count them
       # two ways on purpose: ANY reply is just conversation — the author asking codex a follow-up
       # question is a reply — while a reply carrying the resolver round marker is the only thing
@@ -184,6 +184,7 @@ case "$CMD" in
         | map(select($all or .position != null))
         | map((.body // "") as $b | {
             id, path, line: (.line // .original_line),
+            priority: ([ $b | capture("badge/P(?<p>[0-9])").p ] | first | if . == null then null else "P" + . end),
             severity: (([ $b | capture("badge/P(?<p>[0-9])").p ] | first | if . == null then "note" else sev end)),
             title: (([ $b | capture("</sub></sub>\\s*(?<t>[^*\n]+)").t ] | first) // ($b | split("\n")[0])),
             outdated: (.position == null),

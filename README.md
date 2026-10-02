@@ -39,7 +39,6 @@ Add this repository as a marketplace, then install whichever plugins you want:
 
 ```sh
 codex plugin marketplace add subhan-io/skills
-codex plugin add ship-issue@subhan-skills
 codex plugin add pr-media-upload@subhan-skills
 ```
 
@@ -95,29 +94,30 @@ pr-media-upload plugins for their corresponding branches.
 ### ship-issue
 
 Confirms acceptance criteria and a planning tier, plans inline
-(dispatching an Opus planner only for deep work), proposes an issue split past three chunks,
-implements each chunk in a fresh Codex session via `scripts/run-codex.sh`, and runs one Codex
-review round. Every Codex session ends with a `handoff.md` message whose *Remaining plan
+(dispatching an Opus planner only for deep work), proposes an issue split when the parts ship
+independently, implements each chunk in a fresh Sonnet implementer subagent, and runs up to two
+Codex GitHub review rounds (round 1 fixes P0–P2, round 2 fixes P0–P1, no third). Every implementer ends with a `handoff.md` message whose *Remaining plan
 impact* line lets a chunk adjust or void the plan behind it; the orchestrator keeps a rewritten
 `run-state.md` scratchpad under `~/.local/state/ship-issue/issue-<n>/` and folds each run's
-repo gotchas into `<repo>/.claude/ship-issue/repo-notes.md` for the next one. Every run and
-every Codex session appends token usage to `~/.local/state/ship-issue/ledger.jsonl`;
-`scripts/usage-report.sh` reports cost and friction per run.
-The skill carries its own Codex-harness adaptations, so the native Codex plugin runs the same
-workflow. Uses the plan-explainer, ui-evidence, and codex-review plugins — install those
-alongside it.
+repo gotchas into `<repo>/.claude/ship-issue/repo-notes.md` for the next one. Every run
+writes events to `~/.local/state/ship-issue/ledger.jsonl`; `scripts/usage-report.sh` joins
+them with the session transcripts, subagents included, to report cost and friction per run.
+Claude Code only, since implementers are Agent-tool subagents. Uses the plan-explainer,
+ui-evidence, and codex-review plugins — install those alongside it.
 
 The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues. The
 epic builds on an integration branch, `epic/<n>`: every sub-issue branches from it and opens
 its PR against it, so parallel sub-issues are ordinary siblings and the base branch receives
 the feature once, as the epic's own PR. Each invocation is one tick that syncs the branch
-with the base (routing merge conflicts to a Codex session), surveys the epic, ships the next
-unblocked sub-issue through `/ship-issue` with the epic's build order and contracts as
-context, and rewrites a status block in the epic body. `/ship-epic afk` instead dispatches
-each pick as its own t3code sidebar thread (via the local t3 server's HTTP dispatch API),
-runs the light/standard gates unattended, and merges each review-ready PR into the epic
-branch until the whole feature is in. An issue labeled `hitl` is completed as a checkpoint
-and stops the run from advancing to later issues.
+with the base (routing merge conflicts to an implementer subagent), surveys the epic, ships
+the next unblocked sub-issue through `/ship-issue` with the epic's build order and contracts as
+context, and rewrites a status block in the epic body. `/ship-epic afk` instead launches
+each pick as its own T3 Code sidebar thread in its own worktree (via the `t3-code` MCP
+server's `t3_thread_launch`; needs a T3 Code build with the V2 orchestrator), runs the
+light/standard gates unattended, and merges each review-ready PR into the epic branch until
+the whole feature is in. Each run reports back to the epic thread with `t3_thread_send`, and
+an hourly scheduled heartbeat catches runs that stop without reporting. An issue labeled
+`hitl` is completed as a checkpoint and stops the run from advancing to later issues.
 
 ### plan-explainer
 

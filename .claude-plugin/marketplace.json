@@ -14,9 +14,9 @@
         "./plugins/ship-issue/skills/ship-epic"
       ],
       "strict": false,
-      "description": "Take one GitHub issue or adhoc task to a finished PR: confirm criteria and a planning tier, plan in token-sized chunks (splitting the issue past two chunks), implement each chunk in a fresh Codex session, one review round, a usage ledger per run — the human merges.",
+      "description": "Take one GitHub issue or adhoc task to a finished PR: confirm criteria and a planning tier, plan in chunks (splitting the issue when its parts ship independently), implement each chunk in a fresh Sonnet subagent, up to two Codex review rounds, a usage ledger per run — the human merges.",
       "author": { "name": "Subhan Mahmood" },
-      "keywords": ["github", "issues", "codex", "code-review", "agents"]
+      "keywords": ["github", "issues", "code-review", "agents"]
     },
     {
       "name": "plan-explainer",

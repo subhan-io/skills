@@ -5,13 +5,13 @@
 #   usage-report.sh [--since 2026-08-18] [--run <id>] [--json]
 #
 # --run narrows the report to one run, ignoring --since: the hand-over step prints
-# that run's friction (Codex sessions that exited non-zero, verify failures,
-# review rounds, findings) beside its cost.
+# that run's friction (verify failures, review rounds, findings) beside its cost.
 #
 # Per run (a run-start event, closed by its run-end):
 #   - Events join by the run id stamped at run-start when present; older ledger
 #     rows without one fall back to issue + time window.
-#   - Codex: distinct sessions (empty sessionId rows are failures, not sessions);
+#   - Codex (runs before implementers moved to Claude subagents, 2026-10):
+#     distinct sessions (empty sessionId rows are failures, not sessions);
 #     token totals dedupe by sessionId keeping the LAST event per session, because
 #     a rollout's total_token_usage is cumulative — summing a chunk event and its
 #     resume event would double count.

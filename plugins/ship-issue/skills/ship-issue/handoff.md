@@ -2,8 +2,10 @@
 
 Append this file to every implementation prompt, after `anti-slop.md`. Your final
 message is a handoff: the next session starts with none of your context, and the
-orchestrator decides what runs next from what you write here. End the message with
-these sections, in this order, each present even when its content is "none".
+orchestrator decides what runs next from what you write here. Write it to the
+handoff path your prompt names, then return the same text as your final message.
+End the message with these sections, in this order, each present even when its
+content is "none".
 
 ## Done
 
