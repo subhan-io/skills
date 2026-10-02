@@ -53,8 +53,8 @@ the run merges its own PR. The rules that change:
   reported back, never executed. **Step 5**: a `replan` that keeps the scope and
   criteria continues; one that changes either stops the run — report what the
   chunk found.
-- **Review**: step 7's rounds apply as written. A valid P0 or P1 from round two
-  that a fix cannot clear stops the run unmerged.
+- **Review**: step 7's rounds apply as written. A valid critical or high finding
+  from round two that a fix cannot clear stops the run unmerged.
 - **Merge**: when the last round's fixes are pushed and the PR is green, merge it —
   `gh pr merge <n> --squash --delete-branch` — and log `run-end outcome=merged`.
   Green means the head commit has a GitHub Actions check suite and every required
@@ -293,22 +293,38 @@ Before requesting anything: run the repo's lint and anti-slop checks yourself an
 reread the diff against `anti-slop.md` — every finding you catch here is a review
 round you don't pay for.
 
-Then log `event=phase phase=review-requested round=<n>`, run one round with the
-`codex-review` skill, and log `phase=review-settled round=<n>` when it lands.
-Triage its findings yourself: decide each from the code it points at, not from
-the finding's confidence. Which valid findings you fix depends on the round and
-the finding's Codex priority (`priority` in the `findings` output):
+A round is one `/codex:adversarial-review` of the branch against the PR's base.
+That command sets `disable-model-invocation`, so the Skill tool cannot call it;
+run the script the command runs, from the repo, with the Bash tool in the
+background (a review takes minutes; completion wakes you):
 
-- **Round 1**: fix valid P0, P1 and P2 findings.
-- **Round 2** runs only when round 1 pushed fixes. Fix valid P0 and P1 findings.
-- **No round 3.** Push round 2's fixes and hand over without requesting another
-  review.
+```bash
+node "$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/ | sort -V | tail -1)scripts/codex-companion.mjs" \
+  adversarial-review --wait --base origin/<base> "Issue #<n>. Criteria: <confirmed criteria, one line>"
+```
+
+`<base>` is the default branch, or `epic/<n>` under `ship-epic`. `--base` makes
+it review the committed branch diff, so commit every fix before a round. When
+the script is missing or Codex is not set up (`/codex:setup`), stop and report —
+do not substitute another reviewer.
+
+Log `event=phase phase=review-requested round=<n>` before the run and
+`phase=review-settled round=<n>` when it returns. Triage its findings yourself:
+decide each from the code it points at, not from the finding's confidence or
+its adversarial tone. Which valid findings you fix depends on the round and the
+finding's severity (`[critical]`, `[high]`, `[medium]`, `[low]`):
+
+- **Round 1**: fix valid critical, high and medium findings.
+- **Round 2** runs only when round 1 produced fixes. Fix valid critical and high
+  findings.
+- **No round 3.** Push round 2's fixes and hand over without another review.
 
 Fix small findings yourself; the rest go to one **fresh** review-fix implementer
 for the round — never a `SendMessage` to a chunk's agent; push, and refresh
-any shots the fixes changed. Every finding you do not fix gets a reply tagged
-`(resolver, round N)`: the evidence for an invalid one, or "deferred: P<n>" for a
-valid one below the round's bar. Deferred findings go in the handover report.
+any shots the fixes changed. After each round, post one PR comment headed
+`Codex adversarial review, round N`: every finding with its disposition — fixed
+(commit), invalid (the evidence), or "deferred: <severity>" for a valid one below
+the round's bar. Deferred findings go in the handover report.
 
 A valid finding that states a rule for the whole repo, not a one-off bug, goes into
 `repo-notes.md` in the round's fix commit, worded as the rule: "a worker job can be
