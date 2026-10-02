@@ -14,8 +14,8 @@
 # run-start extras:
 #   - `issue` must be present and not 0 (an adhoc slug is fine).
 #   - A `run` id is generated if none was passed, and printed on stdout. Pass it
-#     back as run=<id> on every later event of the run (and as --run to
-#     run-codex.sh) so events join exactly, not by issue + time window.
+#     back as run=<id> on every later event of the run so events join exactly,
+#     not by issue + time window.
 #   - `claudeSession` (this orchestrator session's transcript file) is recorded
 #     automatically from the newest transcript under the cwd's project dir, so
 #     usage-report.sh can sum exactly this session instead of a time window.
@@ -73,8 +73,8 @@ done
 # Every step is one of four events; a step logged as its own event (e.g.
 # event=review-requested) is invisible to usage-report.sh.
 case "$event" in
-  run-start|run-end|phase|codex) ;;
-  *) echo "ledger.sh: unknown event '$event' (allowed: run-start run-end phase codex)" >&2
+  run-start|run-end|phase) ;;
+  *) echo "ledger.sh: unknown event '$event' (allowed: run-start run-end phase)" >&2
      exit 1 ;;
 esac
 
@@ -89,7 +89,7 @@ if [ "$event" = "phase" ]; then
 fi
 
 # `tick` closes a ship-epic tick's run (issue=epic-<n>, tier=epic): the run that
-# owns the tick's own Codex sessions, such as an integration-branch sync.
+# owns the tick's own subagents, such as an integration-branch sync.
 if [ "$event" = "run-end" ]; then
   case "$outcome" in
     pr-open|merged|stopped|split|tick) ;;
