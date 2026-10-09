@@ -90,6 +90,10 @@ as behavioral evidence, but cannot occupy `published:` or justify skipping a rou
   session.
 - A throwaway script outside the repo can't `import` the app's Playwright: anchor a
   `createRequire` at the app's `package.json` and `require("@playwright/test")`.
+- Upload each shot without opening it, then open one or two at the end to confirm
+  the capture worked. Every image an agent opens is replayed on each later turn:
+  implementers that opened every shot ended near 250k tokens of context. Check a
+  shot's content with the selector you waited on, not by looking.
 - **Publish before you delete.** Upload each image with `pr-media-upload` and record
   the URL first; a deleted PNG means retaking the shot from scratch.
 - Tear down what you built: harness route, capture script, images, dev server.

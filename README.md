@@ -96,7 +96,9 @@ pr-media-upload plugins for their corresponding branches.
 Confirms acceptance criteria and a planning tier, plans inline
 (dispatching an Opus planner only for deep work), proposes an issue split when the parts ship
 independently, implements each chunk in a fresh Sonnet implementer subagent, and runs up to two
-Codex adversarial review rounds (round 1 fixes critical–medium, round 2 fixes critical–high, no third). Every implementer ends with a `handoff.md` message whose *Remaining plan
+Codex adversarial review rounds (round 1 fixes critical–medium, round 2 fixes critical–high, no third)
+through `scripts/review.sh`, which falls back to Claude Code's `/code-review` when Codex is out
+of usage. Every implementer ends with a `handoff.md` message whose *Remaining plan
 impact* line lets a chunk adjust or void the plan behind it; the orchestrator keeps a rewritten
 `run-state.md` scratchpad under `~/.local/state/ship-issue/issue-<n>/` and folds each run's
 repo gotchas into `<repo>/.claude/ship-issue/repo-notes.md` for the next one. Every run
@@ -112,7 +114,8 @@ its PR against it, so parallel sub-issues are ordinary siblings and the base bra
 the feature once, as the epic's own PR. Each invocation is one tick that syncs the branch
 with the base (routing merge conflicts to an implementer subagent), surveys the epic, ships
 the next unblocked sub-issue through `/ship-issue` with the epic's build order and contracts as
-context, and rewrites a status block in the epic body. `/ship-epic afk` instead launches
+context, and rewrites a status block in the epic body. `scripts/epic-survey.sh` builds the
+status table and the eligible picks in one call. `/ship-epic afk` instead launches
 each pick as its own T3 Code sidebar thread in its own worktree (via the `t3-code` MCP
 server's `t3_thread_launch`; needs a T3 Code build with the V2 orchestrator), runs the
 light/standard gates unattended, and merges each review-ready PR into the epic branch until
@@ -143,3 +146,8 @@ until it has actually settled, reads only findings covering the head commit, and
 Uploads a screenshot, GIF, video, or HTML demo to a public S3 bucket and prints a permanent URL
 for a GitHub PR, issue, or comment. Requires logged-in `infisical` and the AWS CLI. Uploads are
 public and permanent; never upload secret or personal material.
+
+## Checks
+
+CI runs `shellcheck -S warning` on every script and `tests/ship-issue-scripts.sh`, a fixture
+test of the ledger, usage report and review fallback. Run both locally before pushing.

@@ -28,6 +28,12 @@
 #     subtracted from the outer run, so the tick row shows only the tick's own
 #     turns.
 #   - Phase events (event=phase) are listed per run in --json output.
+#   - Review rounds: `reviewers` lists who settled each round (codex, or claude
+#     when review.sh fell back on a spent Codex quota). Codex reviews run
+#     ephemeral and leave no session log, so their cost is not on disk; a Claude
+#     fallback review logs its token usage on the event, added to the cl-* totals.
+#   - A run resumed after a stop keeps its run id and logs a second run-end; the
+#     last one is the run's outcome.
 # A run with no run-end is reported as open, window capped at now. Once it is a
 # day old it is reported as abandoned instead, its window ending at its last
 # event, so a dead run neither reads as live nor absorbs later sessions.
@@ -77,7 +83,7 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
                 | select(if ($s.run // "") != "" and (.run // "") != ""
                          then .run == $s.run
                          else (.issue|tostring) == ($s.issue|tostring) and .ts >= $s.ts end)]
-         | first) as $e0
+         | if ($s.run // "") != "" then last else first end) as $e0
       | (($now | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime)
          - ($s.ts | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime) > 86400) as $stale
       | (if $e0 == null and $stale and ($s.run // "") != ""
@@ -97,7 +103,8 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
          findingsValid: ($e.findingsValid // null), findingsInvalid: ($e.findingsInvalid // null),
          verifyRetries: ($e.verifyRetries // null),
          phases: ([$ev[] | select(.event == "phase") | select(belongs($s; $e))
-                         | {phase, ts, round: (.round // null), chunk: (.chunk // null)}]),
+                         | {phase, ts, round: (.round // null), chunk: (.chunk // null),
+                            reviewer: (.reviewer // null), reviewUsage: (.reviewUsage // null)}]),
          errors: ([$cx[] | select(.exitCode != 0) | {role, ts, exitCode, error: (.error // "")}]),
          codexFailures: ([$cx[] | select(.exitCode != 0)] | length),
          verifyFailed: ([$ev[] | select(.event == "phase" and .phase == "verify-failed") | select(belongs($s; $e))] | length),
@@ -160,6 +167,13 @@ for i in $(seq 0 $((n - 1))); do
       [ -n "$claude" ] || claude='{"msgs":0,"cache_read":0,"cache_write":0,"out":0,"models":{},"join":"none"}'
     fi
   fi
+  # Claude fallback reviews ran headless in their own session: add the usage they logged.
+  claude="$(jq -c --argjson r "$run" '
+    ([$r.phases[] | select(.phase == "review-settled" and .reviewUsage != null) | .reviewUsage | to_entries[]]) as $u
+    | .cache_read += ($u | map(.value.cacheRead // 0) | add // 0)
+    | .cache_write += ($u | map(.value.cacheWrite // 0) | add // 0)
+    | .out += ($u | map(.value.out // 0) | add // 0)
+    | .models += ($u | group_by(.key) | map({(.[0].key + "(review)"): length}) | add // {})' <<<"$claude")"
   report="$(jq -c --argjson r "$run" --argjson c "$claude" '. + [$r + {claude: $c}]' <<<"$report")"
 done
 
@@ -172,11 +186,12 @@ echo "ship-issue runs since $SINCE  (cl-join: session = exact transcript, window
 jq -r '
   def m: tostring | if (.|length) > 6 then (.[0:-6] + "." + .[-6:-5] + "M") else . end;
   def models: to_entries | map((.key | sub("^claude-"; "")) + ":" + (.value|tostring)) | join(" ") | if . == "" then "-" else . end;
-  (["issue","tier","start","min","outcome","chk","rr","vfail","cdx-fail","find-ok/bad","cdx-sess","cdx-total","cdx-uncached","cl-cread","cl-cwrite","cl-out","cl-models","cl-join"] | @tsv),
+  def reviewers: [.phases[] | select(.phase == "review-settled") | (.reviewer // "codex")]
+                 | join(",") | if . == "" then "-" else . end;
+  (["issue","tier","start","min","outcome","chk","rr","reviewers","vfail","find-ok/bad","cl-cread","cl-cwrite","cl-out","cl-models","cl-join"] | @tsv),
   (.[] | [.issue, .tier, (.start[0:16] + " "), .durationMin, .outcome,
-          (.chunks // "-"), (.reviewRounds // "-"),
-          .verifyFailed, .codexFailures,
+          (.chunks // "-"), (.reviewRounds // "-"), reviewers,
+          .verifyFailed,
           ((.findingsValid // "-"|tostring) + "/" + (.findingsInvalid // "-"|tostring)),
-          .codex.sessions, (.codex.total|m), (.codex.uncached|m),
           (.claude.cache_read|m), (.claude.cache_write|m), (.claude.out|m), (.claude.models|models), .claude.join] | @tsv)
 ' <<<"$report" | if command -v column >/dev/null 2>&1; then column -t -s $'\t'; else awk -F'\t' '{for (i=1;i<=NF;i++) printf "%-16s", $i; print ""}'; fi
