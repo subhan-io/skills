@@ -55,21 +55,25 @@ the run merges its own PR. The rules that change:
   chunk found.
 - **Review**: step 7's rounds apply as written. A valid critical or high finding
   from round two that a fix cannot clear stops the run unmerged.
-- **Merge**: when the last round's fixes are pushed and the PR is green, merge it —
-  `gh pr merge <n> --squash --delete-branch` — and log `run-end outcome=merged`.
-  Green means the head commit has a GitHub Actions check suite and every required
-  check on it passed. An empty check list right after a push means CI has not
-  started yet (it can take ten minutes), not that it passed. Anything short of
-  green hands over as usual, unmerged.
+- **Merge**: when the last round's fixes are pushed, wait for CI with
+  `scripts/ci-wait.sh --repo <owner/name> --pr <n>` (in the background; it
+  blocks until the head commit's checks settle and prints one line). On `green`,
+  merge — `gh pr merge <n> -R <owner/name> --squash --delete-branch`; the `-R`
+  skips the local checkout of the base, which fails in a worktree — and log
+  `run-end outcome=merged`. `red` or `timeout` hands over as usual, unmerged.
 - The handover report (step 8) still happens in full — it is the only record the
   human gets.
 - **Under `ship-epic`** (the launch message says so): the PR opens against the
-  epic's integration branch, `epic/<n>`, and the merge above lands there. The
-  handover goes up as a comment on the issue after `run-end` and
-  `usage-report.sh`. The run's **last action** is the `t3_thread_send` report the
-  launch message specifies: it wakes the epic thread, which settles this thread
-  on `outcome=merged`. A run that stops short posts the comment and sends the
-  report too.
+  epic's integration branch, `epic/<n>`, and the merge above lands there. A merge
+  into a non-default branch does not close the issue, so close it yourself after
+  the merge: the epic thread reads a closed issue as merged. The handover goes up
+  as a comment on the issue after `run-end` and `usage-report.sh`. The run's
+  **last action** is the `t3_thread_send` report the launch message specifies:
+  it wakes the epic thread, which settles this thread on `outcome=merged`. A run
+  that stops short posts the comment and sends the report too.
+- **Resume.** A stopped run that is sent a resume message continues from
+  `run-state.md` under the run id it already has: no second `run-start`. It
+  logs a second `run-end` when it finishes, and the report takes the last one.
 
 ## The ledger
 
@@ -88,9 +92,9 @@ None of these writes are skippable:
 - Phase events, so cost can be attributed per step:
   `event=phase phase=plan-approved` at gate 2; `phase=planner-done` when a deep-tier
   Plan agent returns (its Opus cost is invisible to the ledger otherwise);
-  `phase=verify-failed chunk=<i>` on each failed chunk verify;
-  `phase=review-requested round=<n>` and `phase=review-settled round=<n>` around
-  each review round. Always with `run=<id> issue=<n>`. `ledger.sh` rejects phase
+  `phase=verify-failed chunk=<i>` on each failed chunk verify. Always with
+  `run=<id> issue=<n>`. `scripts/review.sh` logs each review round's
+  `review-requested` and `review-settled` itself. `ledger.sh` rejects phase
   names outside this set — an event it refuses is a step this skill doesn't have.
 - `scripts/ledger.sh event=run-end run=<id> issue=<n> outcome=<pr-open|merged|stopped|split>
   pr=<n> chunks=<n> reviewRounds=<n> findingsValid=<n> findingsInvalid=<n>
@@ -219,8 +223,13 @@ shape of the final message you act on.
 For a chunk touching anything a user sees, paste the complete loaded
 `ui-evidence` content into the prompt under a `UI evidence contract` heading and
 make published screenshots part of the deliverable. Do not launch a UI chunk
-whose prompt merely names or links the skill. A worker's evidence report is an
-input to the final gate; the orchestrator still owns that gate.
+whose prompt merely names or links the skill. Also tell the implementer to
+upload its shots without opening them, except one or two at the end to confirm
+the capture worked: every image an agent opens is replayed on each later turn,
+and implementers that opened 9–23 shots each ended near 250k tokens of context.
+The chunk's own implementer captures its shots; a separate capture agent shoots
+the same pixels twice. A worker's evidence report is an input to the final gate;
+the orchestrator still owns that gate.
 
 Write the ownership split into every prompt: the implementer works in `<repo>`
 and runs every check that gates its chunk — typecheck, unit tests, lint,
@@ -275,14 +284,17 @@ incomplete gate: continue capture or stop the run.
 Before the PR, harvest the handoffs' *Repo gotchas*. A fact a future run should
 know goes into `<repo>/.claude/ship-issue/repo-notes.md`, folded into the section
 it belongs to — the file is a reference, not a log: merge, and delete an entry this
-run proved stale. Create the file with the first fact. Commit that change on the
+run proved stale. Create the file with the first fact. Concurrent runs under
+`ship-epic` edit it too: on a conflict in it, keep both sides' entries and
+merge duplicates. Commit that change on the
 branch by itself and name it in the PR body; a gotcha that surfaces later in a
 review-fix implementer rides that round's commit.
 
 After the evidence gate, verify that cleanup returned the tree to the recorded
 HEAD, then push and run `gh pr create` — with `--base epic/<n>` when `ship-epic`
-named an integration branch. The body contains the issue link, confirmed
-criteria checklist, chunk summary and the evidence report. The PR is not open
+named an integration branch. The body opens with `Closes #<n>` (the epic
+survey finds the PR by it), then the confirmed criteria checklist, chunk summary
+and the evidence report. The PR is not open
 until this gate is complete. When the `t3-code` MCP server exposes
 `link_pull_request`, link the PR to this thread right after creating it, so the
 sidebar tracks its checks and merge.
@@ -293,26 +305,28 @@ Before requesting anything: run the repo's lint and anti-slop checks yourself an
 reread the diff against `anti-slop.md` — every finding you catch here is a review
 round you don't pay for.
 
-A round is one `/codex:adversarial-review` of the branch against the PR's base.
-That command sets `disable-model-invocation`, so the Skill tool cannot call it;
-run the script the command runs, from the repo, with the Bash tool in the
-background (a review takes minutes; completion wakes you):
+A round is one `scripts/review.sh` call, run from the repo with the Bash tool in
+the background (a review takes minutes; completion wakes you):
 
 ```bash
-node "$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/ | sort -V | tail -1)scripts/codex-companion.mjs" \
-  adversarial-review --wait --base origin/<base> "Issue #<n>. Criteria: <confirmed criteria, one line>"
+scripts/review.sh --run <id> --issue <n> --round <n> --base origin/<base> \
+  --focus "Issue #<n>. Criteria: <confirmed criteria, one line>"
 ```
 
-`<base>` is the default branch, or `epic/<n>` under `ship-epic`. `--base` makes
-it review the committed branch diff, so commit every fix before a round. When
-the script is missing or Codex is not set up (`/codex:setup`), stop and report —
-do not substitute another reviewer.
+`<base>` is the default branch, or `epic/<n>` under `ship-epic`. The script
+reviews the committed branch diff, so commit every fix before a round. It runs
+Codex's `/codex:adversarial-review`; when Codex answers with its usage limit, it
+falls back to Claude Code's `/code-review`, run headless on Opus. The output is
+headed with the reviewer that produced it, and the script logs the round's
+`review-requested` and `review-settled` events. Exit 1 means the round failed
+(Codex broke for another reason, or the fallback failed too) and exit 2 means
+Codex is not installed (`/codex:setup`): stop and report either one.
 
-Log `event=phase phase=review-requested round=<n>` before the run and
-`phase=review-settled round=<n>` when it returns. Triage its findings yourself:
-decide each from the code it points at, not from the finding's confidence or
-its adversarial tone. Which valid findings you fix depends on the round and the
-finding's severity (`[critical]`, `[high]`, `[medium]`, `[low]`):
+Triage the findings yourself: decide each from the code it points at, not from
+the finding's confidence or its adversarial tone. Codex tags each finding with a
+severity; the Claude fallback does not, so grade each of its findings on the
+same scale before applying the bar. Which valid findings you fix depends on the
+round and the finding's severity (`[critical]`, `[high]`, `[medium]`, `[low]`):
 
 - **Round 1**: fix valid critical, high and medium findings.
 - **Round 2** runs only when round 1 produced fixes. Fix valid critical and high
@@ -322,7 +336,7 @@ finding's severity (`[critical]`, `[high]`, `[medium]`, `[low]`):
 Fix small findings yourself; the rest go to one **fresh** review-fix implementer
 for the round — never a `SendMessage` to a chunk's agent; push, and refresh
 any shots the fixes changed. After each round, post one PR comment headed
-`Codex adversarial review, round N`: every finding with its disposition — fixed
+`Review round N (<reviewer>)`: every finding with its disposition — fixed
 (commit), invalid (the evidence), or "deferred: <severity>" for a valid one below
 the round's bar. Deferred findings go in the handover report.
 

@@ -59,37 +59,42 @@ scripts/epic-branch.sh sync   --repo <repo> --epic <n> --base <base>
 `ensure` creates `epic/<n>` from the base when it is absent. `sync` merges the
 base into it and pushes; a conflict goes to step 4 before anything is picked.
 
-Read the epic (`gh issue view <n>`) and its native sub-issues, including labels:
+Survey the epic in one call:
 
 ```bash
-gh api graphql -f query='query{repository(owner:"<o>",name:"<r>"){issue(number:<n>){
-  subIssues(first:50){nodes{number title state labels(first:20){nodes{name}}}}}}'
+scripts/epic-survey.sh --repo <repo> --epic <n>
 ```
 
-For each open sub-issue, find any PR that references it (`gh pr list --search
-"<number> in:body"`). Build one status table: sub-issue, state, PR state
-(none / open / green / review-ready / merged into `epic/<n>`), and blockers.
-`green` means CI passed; `review-ready` additionally satisfies the completion
-test in step 3.
+It prints the status table — every work issue (a sub-issue, or the child of a
+sub-issue that groups others) with its status, its PR against `epic/<n>` and that
+PR's CI, and its open blockers — then the `hitl` horizon, the eligible picks, the
+issues whose PR merged but whose issue is still open, and the PRs in review.
+`<repo>` here and in every script below is a local checkout path, not
+`owner/name`. Read the epic body (`gh issue view <n>`) for its goal, build
+order and contracts. Blockers come from GitHub's blocked-by dependencies; when
+the body's build order names one GitHub does not record, add it to the issue so
+the next survey sees it. If the body states no order and the issues carry no
+dependencies, put your proposed order to the human in one AskUserQuestion, then
+edit it into the epic body and record it as dependencies.
+
+A run closes its own issue after merging. An issue the survey lists under
+`merged-open` whose run has already reported is one its run left open: close
+that issue, and only issues the survey names there.
 
 In AFK mode, call `t3_thread_list` with `titleContains: "ship-issue #"` and
 `settled: false`. An unsettled thread whose issue has no report yet is a run
 already in flight from an earlier invocation: it counts against the concurrency
 limit, and its issue gets no second run.
 
-In AFK mode, find the first open issue in build order with a case-insensitive
-`hitl` label. That issue is the run's horizon: it remains eligible, while every
-issue after it is outside this run. Apply the horizon before launching anything,
-including independent work, so concurrency cannot cross the barrier.
-
-Blockers come from the epic body's build order. If the body states no order,
-put your proposed order to the human in one AskUserQuestion, then edit it into
-the epic body so later ticks read it instead of asking.
+In AFK mode the survey's `horizon` (the first open issue labelled `hitl`) bounds
+the run: that issue remains eligible, every issue after it is outside this run,
+and the survey already reports them as `beyond-horizon`, so concurrency cannot
+cross the barrier.
 
 ## 2. Pick
 
-The next sub-issue is the first in build order that is open, has no PR, and
-whose blockers have all merged into `epic/<n>`. A blocker that is open but
+The next sub-issue is the first on the survey's `eligible` line: open, no PR,
+every blocker merged into `epic/<n>`. A blocker that is open but
 unmerged is a wait, not a branch to build on: the pick starts once it lands,
 from a tip that holds the blocker's finished work. Independent sub-issues are
 eligible together. If none qualifies, report what each remaining sub-issue
@@ -217,6 +222,11 @@ can be deferred: load each `t3-code` tool this step names before its first call.
 
   A run that stopped short is a failure (step 5). Interrupt nothing that is
   still working.
+- **Resume a transient stop.** A run that stopped on a cause outside its work —
+  a usage limit, a CI or GitHub outage — is resumed, never relaunched: once the
+  cause has cleared, `t3_thread_send` its thread (mode `queue`) a message naming
+  the cause and telling it to continue from `run-state.md`. It keeps its
+  worktree, PR and run id, and reports again when it finishes.
 - **Settle the thread once its handoff is complete.** When a report says
   `outcome=merged`, call `t3_thread_wait` on its thread (the report was the
   run's last action, so its turn ends within moments), then
@@ -302,13 +312,16 @@ gh pr ready <pr>
 
 Link it to this thread with `link_pull_request`, so the sidebar shows its state.
 Its body holds the epic link and the list of sub-issue PRs merged into the
-branch, each linked; refresh that list every tick. The human merges it — the
+branch, each linked; refresh that list when a sub-issue PR has merged since the
+last refresh. The human merges it — the
 skill never does. A `hitl` checkpoint leaves it a draft: the human reads the
 draft's diff so far, the merged sub-issue PRs, and the status block, then
 re-invokes the run; a partial feature never becomes a ready PR.
 
-End every tick by rewriting the epic's status block: the table from step 1,
-refreshed — what merged into `epic/<n>`, what is parked for an attended tick,
+End every tick whose survey differs from the status block — a merge, a new PR,
+a park, a changed wait — by rewriting the block; a report turn that changed
+nothing leaves it as it is. The block holds the survey table from step 1,
+annotated — what merged into `epic/<n>`, what is parked for an attended tick,
 what waits on the human, what the next tick will pick up — then the branch as
 `scripts/epic-branch.sh status` prints it (drift from the base, PRs merged and
 open against it, the epic PR). Write it to a file and replace the block in the
@@ -319,7 +332,7 @@ scripts/epic-status.sh --repo <repo> --epic <n> --file <status.md>
 ```
 
 It replaces everything between the markers and appends the block on first use, so
-the body always holds one current table and never a trail of them. Print the same
+the body always holds one current table and never a trail of them. Print the
 table in chat, then close the tick's ledger run:
 
 ```bash

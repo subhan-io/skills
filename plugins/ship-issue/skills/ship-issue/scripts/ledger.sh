@@ -13,6 +13,8 @@
 #
 # run-start extras:
 #   - `issue` must be present and not 0 (an adhoc slug is fine).
+#   - `repo` comes from the git origin of `cwd` when there is one, overriding a
+#     passed value: runs once logged the repo's old owner from memory.
 #   - A `run` id is generated if none was passed, and printed on stdout. Pass it
 #     back as run=<id> on every later event of the run so events join exactly,
 #     not by issue + time window.
@@ -26,6 +28,9 @@
 #   - `model` (the orchestrator's model, from that transcript's latest assistant
 #     message) is recorded beside it, so a run on the wrong model is visible in
 #     the ledger row itself, not only in usage-report.sh.
+#
+# phase=plan-approved is logged once per run: a repeat is a no-op, since light
+# work and AFK runs reach both of the places the skill logs it.
 #
 # The ledger is machine-central (one file across all repos and sessions) so a later
 # session can audit cost per run: see usage-report.sh.
@@ -86,6 +91,11 @@ if [ "$event" = "phase" ]; then
     *) echo "ledger.sh: unknown phase '$phase' (allowed: plan-approved planner-done verify-failed review-requested review-settled)" >&2
        exit 1 ;;
   esac
+  if [ "$phase" = "plan-approved" ] && [ -n "$run_id" ] && [ -f "$LEDGER" ] \
+     && jq -n -e --arg r "$run_id" 'any(inputs; .run == $r and .phase == "plan-approved")' "$LEDGER" >/dev/null 2>&1; then
+    echo "ledger.sh: plan-approved already logged for $run_id" >&2
+    exit 0
+  fi
 fi
 
 # `tick` closes a ship-epic tick's run (issue=epic-<n>, tier=epic): the run that
@@ -110,6 +120,13 @@ if [ "$event" = "run-start" ]; then
     [ -n "$rand" ] || rand="$$-$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     run_id="r-$(date -u +%Y%m%dT%H%M%SZ)-${issue}-${rand}"
     kvs+=("run=$run_id")
+  fi
+  origin="$( [ -n "$cwd" ] && git -C "$cwd" remote get-url origin 2>/dev/null || true)"
+  origin_repo="$(sed -E 's#^(git@[^:]+:|[a-z+]+://[^/]+/)##; s#\.git$##' <<<"$origin")"
+  if [ -n "$origin" ] && [[ "$origin_repo" == */* ]]; then
+    kept=()
+    for kv in "${kvs[@]}"; do [ "${kv%%=*}" = "repo" ] || kept+=("$kv"); done
+    kvs=("${kept[@]}" "repo=$origin_repo")
   fi
   if [ -z "$claude_session" ] && [ -n "$cwd" ]; then
     newest="" fallback=""
