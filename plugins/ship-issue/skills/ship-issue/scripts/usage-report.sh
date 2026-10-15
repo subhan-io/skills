@@ -23,6 +23,9 @@
 #     tokens, split cache-read / cache-write / output — cache reads dominate and
 #     are what subscription limits mostly meter. `models` lists every model that
 #     answered, with its message count, so a run that landed on Fable shows it.
+#     `orch%` is the orchestrator session's share of the cache reads (the rest is
+#     its subagents); each orchestrator turn replays its whole context, so a run
+#     whose orchestrator does implementer work shows a high share.
 #   - Nested runs: a run that starts inside another run's window in the same
 #     claudeSession (a ship-epic tick and the attended sub-issue it ships) is
 #     subtracted from the outer run, so the tick row shows only the tick's own
@@ -60,7 +63,7 @@ AS_JSON=false
 RUN=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --since) SINCE="$2T00:00:00Z"; shift 2 ;;
+    --since) case "$2" in *T*) SINCE="$2" ;; *) SINCE="$2T00:00:00Z" ;; esac; shift 2 ;;
     --run) RUN="$2"; SINCE="1970-01-01T00:00:00Z"; shift 2 ;;
     --json) AS_JSON=true; shift ;;
     *) echo "usage-report.sh: unknown argument $1" >&2; exit 1 ;;
@@ -130,7 +133,7 @@ for i in $(seq 0 $((n - 1))); do
   start="$(jq -r '.start' <<<"$run")"
   end="$(jq -r '.end' <<<"$run")"
   claude_session="$(jq -r '.claudeSession // ""' <<<"$run")"
-  claude='{"msgs":0,"cache_read":0,"cache_write":0,"out":0,"models":{},"join":"none"}'
+  claude='{"msgs":0,"cache_read":0,"orch_cache_read":0,"cache_write":0,"out":0,"models":{},"join":"none"}'
   # Windows of runs nested inside this one in the same session: excluded below.
   nested="$(jq -c --argjson r "$run" '[.[] | select(.run != $r.run and .claudeSession != null
               and .claudeSession == $r.claudeSession and .start >= $r.start and .start <= $r.end)
@@ -152,19 +155,20 @@ for i in $(seq 0 $((n - 1))); do
     fi
     if [ -n "$files" ]; then
       claude="$(echo "$files" \
-        | xargs -r cat 2>/dev/null \
-        | jq -c --arg s "$start" --arg e "$end" --argjson nested "$nested" \
+        | tr '\n' '\0' | xargs -0 jq -c --arg s "$start" --arg e "$end" --argjson nested "$nested" \
             'select(.type == "assistant" and .message.usage and .timestamp >= $s and .timestamp <= $e)
              | select(.timestamp as $t | any($nested[]; $t >= .s and $t <= .e) | not)
-             | {id: (.message.id // "x"), u: .message.usage, model: (.message.model // "?")}' 2>/dev/null \
+             | {id: (.message.id // "x"), u: .message.usage, model: (.message.model // "?"),
+                sub: (input_filename | test("/subagents/"))}' 2>/dev/null \
         | jq -s --arg join "$join" '(group_by(.id) | map(.[-1])) as $m
                  | {msgs: ($m|length),
                     cache_read: ($m | map(.u.cache_read_input_tokens // 0) | add // 0),
+                    orch_cache_read: ($m | map(select(.sub | not) | .u.cache_read_input_tokens // 0) | add // 0),
                     cache_write: ($m | map(.u.cache_creation_input_tokens // 0) | add // 0),
                     out: ($m | map(.u.output_tokens // 0) | add // 0),
                     models: ($m | group_by(.model) | map({(.[0].model): length}) | add // {}),
                     join: $join}')"
-      [ -n "$claude" ] || claude='{"msgs":0,"cache_read":0,"cache_write":0,"out":0,"models":{},"join":"none"}'
+      [ -n "$claude" ] || claude='{"msgs":0,"cache_read":0,"orch_cache_read":0,"cache_write":0,"out":0,"models":{},"join":"none"}'
     fi
   fi
   # Claude fallback reviews ran headless in their own session: add the usage they logged.
@@ -188,10 +192,13 @@ jq -r '
   def models: to_entries | map((.key | sub("^claude-"; "")) + ":" + (.value|tostring)) | join(" ") | if . == "" then "-" else . end;
   def reviewers: [.phases[] | select(.phase == "review-settled") | (.reviewer // "codex")]
                  | join(",") | if . == "" then "-" else . end;
-  (["issue","tier","start","min","outcome","chk","rr","reviewers","vfail","find-ok/bad","cl-cread","cl-cwrite","cl-out","cl-models","cl-join"] | @tsv),
+  (["issue","tier","start","min","outcome","chk","rr","reviewers","vfail","find-ok/bad","cl-cread","orch%","cl-cwrite","cl-out","cl-models","cl-join"] | @tsv),
   (.[] | [.issue, .tier, (.start[0:16] + " "), .durationMin, .outcome,
           (.chunks // "-"), (.reviewRounds // "-"), reviewers,
           .verifyFailed,
           ((.findingsValid // "-"|tostring) + "/" + (.findingsInvalid // "-"|tostring)),
-          (.claude.cache_read|m), (.claude.cache_write|m), (.claude.out|m), (.claude.models|models), .claude.join] | @tsv)
+          (.claude.cache_read|m),
+          (if .claude.join == "session" and .claude.cache_read > 0
+           then ((.claude.orch_cache_read * 100 / .claude.cache_read | floor | tostring) + "%") else "-" end),
+          (.claude.cache_write|m), (.claude.out|m), (.claude.models|models), .claude.join] | @tsv)
 ' <<<"$report" | if command -v column >/dev/null 2>&1; then column -t -s $'\t'; else awk -F'\t' '{for (i=1;i<=NF;i++) printf "%-16s", $i; print ""}'; fi

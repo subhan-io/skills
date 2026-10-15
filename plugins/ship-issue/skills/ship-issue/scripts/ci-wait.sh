@@ -9,7 +9,11 @@
 #
 # Prints exactly one line and exits:
 #   0  green <sha>
-#   1  red <sha> failing=<check>,<check>
+#   1  red <sha> failing=<check>,<check> [log=<file>]
+#
+# On red, the failed steps' logs of every failing GitHub Actions job go to <file>
+# (the last 200 lines of each), so reading why CI failed is one Read, not a
+# round of `gh run view` greps.
 #   2  timeout <sha> <pending|no-checks>
 set -euo pipefail
 
@@ -28,14 +32,22 @@ deadline=$(( $(date +%s) + timeout * 60 ))
 while :; do
   sha="$(gh pr view "$pr" -R "$repo" --json headRefOid -q .headRefOid)"
   # `gh pr checks` exits non-zero when checks fail or are pending; the JSON is what counts.
-  checks="$(gh pr checks "$pr" -R "$repo" --json name,bucket 2>/dev/null || true)"
+  checks="$(gh pr checks "$pr" -R "$repo" --json name,bucket,link 2>/dev/null || true)"
   [ -n "$checks" ] || checks='[]'
   total="$(jq 'length' <<<"$checks")"
   pending="$(jq '[.[] | select(.bucket == "pending")] | length' <<<"$checks")"
   failing="$(jq -r '[.[] | select(.bucket == "fail" or .bucket == "cancel") | .name] | join(",")' <<<"$checks")"
   if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then
     if [ -z "$failing" ]; then echo "green $sha"; exit 0; fi
-    echo "red $sha failing=$failing"; exit 1
+    log="${TMPDIR:-/tmp}/ci-wait-$pr-${sha:0:8}.log"; : >"$log"
+    jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | [.name, .link] | @tsv' <<<"$checks" \
+      | while IFS=$'\t' read -r name link; do
+          [[ "$link" =~ /actions/runs/([0-9]+)/job/([0-9]+) ]] || continue
+          { echo "=== $name"; gh run view "${BASH_REMATCH[1]}" -R "$repo" --job "${BASH_REMATCH[2]}" --log-failed 2>&1 \
+              | sed -E $'s/^[^\t]*\t[^\t]*\t[0-9TZ:.-]+ //' | tail -n 200; } >>"$log"
+        done
+    if [ -s "$log" ]; then echo "red $sha failing=$failing log=$log"; else rm -f "$log"; echo "red $sha failing=$failing"; fi
+    exit 1
   fi
   if [ "$(date +%s)" -ge "$deadline" ]; then
     [ "$total" -eq 0 ] && echo "timeout $sha no-checks" || echo "timeout $sha pending"

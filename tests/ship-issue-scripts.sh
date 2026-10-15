@@ -77,4 +77,19 @@ check "fallback review usage joins the totals" \
   jq -e '.[0].claude.cache_read == 1000 and .[0].claude.models["claude-opus-5-5(review)"] == 1' <<<"$report"
 check "text report lists reviewers" grep -q "claude,codex" <<<"$("$scripts/usage-report.sh" --run "$run")"
 
+# usage-report.sh: orch_cache_read counts the orchestrator transcript, not its subagents.
+repo2="$tmp/repo2"; git init -q "$repo2"
+proj="$HOME/.claude/projects/$(echo "$repo2" | sed 's|[/.]|-|g')"
+mkdir -p "$proj/orch/subagents"
+run2="$("$scripts/ledger.sh" event=run-start issue=8 tier=standard cwd="$repo2" claudeSession=orch.jsonl)"
+sleep 1; ts="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+msg() { printf '{"type":"assistant","timestamp":"%s","message":{"id":"%s","model":"claude-sonnet-5-5","usage":{"cache_read_input_tokens":%s}}}\n' "$ts" "$1" "$2"; }
+msg m1 300 >"$proj/orch.jsonl"
+msg s1 700 >"$proj/orch/subagents/agent-a.jsonl"
+sleep 1; "$scripts/ledger.sh" event=run-end run="$run2" issue=8 outcome=pr-open pr=2
+report2="$("$scripts/usage-report.sh" --run "$run2" --json)"
+check "orchestrator share excludes subagents" \
+  jq -e '.[0].claude.cache_read == 1000 and .[0].claude.orch_cache_read == 300' <<<"$report2"
+check "text report shows orch%" grep -q "30%" <<<"$("$scripts/usage-report.sh" --run "$run2")"
+
 [ "$fails" -eq 0 ] || { echo "$fails check(s) failed"; exit 1; }
