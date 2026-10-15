@@ -64,11 +64,16 @@ the run merges its own PR. The rules that change:
   the head commit's checks have settled. A comment wake gets read and answered
   like a review finding; a conflict wake goes to a fresh fix implementer. Without
   the T3 tools, run `ci-wait.sh` in the background instead; it blocks until the
-  checks settle and prints one line. On `green`, merge —
-  `gh pr merge <n> -R <owner/name> --squash --delete-branch`; the `-R` skips the
-  local checkout of the base, which fails in a worktree — and log
-  `run-end outcome=merged`. `red` or `timeout` hands over as usual, unmerged:
-  call `unwatch_pull_request` first, so the thread returns to the human's inbox.
+  checks settle and prints one line.
+  - `green`: merge — `gh pr merge <n> -R <owner/name> --squash --delete-branch`;
+    the `-R` skips the local checkout of the base, which fails in a worktree —
+    and log `run-end outcome=merged`.
+  - `red`: the line's `log=<file>` holds the failed steps' output; read it
+    rather than querying `gh run view`. A failure the branch caused goes to a
+    fresh fix implementer, then CI runs again, once.
+  - A second `red`, a `red` from a cause outside the branch, or `timeout`:
+    hand over as usual, unmerged. Call `unwatch_pull_request` first, so the
+    thread returns to the human's inbox.
 - The handover report (step 8) still happens in full — it is the only record the
   human gets.
 - **Under `ship-epic`** (the launch message says so): the PR opens against the
@@ -240,8 +245,10 @@ upload its shots without opening them, except one or two at the end to confirm
 the capture worked: every image an agent opens is replayed on each later turn,
 and implementers that opened 9–23 shots each ended near 250k tokens of context.
 The chunk's own implementer captures its shots; a separate capture agent shoots
-the same pixels twice. A worker's evidence report is an input to the final gate;
-the orchestrator still owns that gate.
+the same pixels twice. Tell it to keep its capture script, and any seed or probe
+script it needed, in the run directory as `chunk-<i>.capture.*`, and to list in
+its evidence report the files that render each shot. A worker's evidence report
+is an input to the final gate; the orchestrator still owns that gate.
 
 Write the ownership split into every prompt: the implementer works in `<repo>`
 and runs every check that gates its chunk — typecheck, unit tests, lint,
@@ -256,12 +263,17 @@ Then dispatch it with the Agent tool, in the background:
   then do it."
 
 The prompt file keeps the spec out of your own output and on disk for the record.
-Its final message is the handoff. Then run the chunk's verify command yourself. On
+Its final message is the handoff, and its completion wakes you: after
+dispatching, end the turn. Never `sleep` or poll for the handoff file; each poll
+replays your whole context. Then run the chunk's verify command yourself. On
 failure, log `event=phase phase=verify-failed chunk=<i>` and send the failure
 output back with `SendMessage` to that agent. Keep fixing while each attempt
 makes progress; when an agent's context has grown heavy, a fresh implementer with
 the failure evidence inline is cheaper. Stop and report when attempts repeat the
 same failure. A chunk is done only when its verify command passes in your shell.
+Commit it then, on the run's branch (create the branch first if you are on the
+base), and record the commit in `run-state.md`; the evidence gate in step 6 uses
+it.
 
 A green chunk still steers the plan. Read its handoff's *Remaining plan impact*
 before anything else runs:
@@ -283,15 +295,23 @@ separate `lint:anti-slop` gate caught 52 warnings that three chunks and two
 review rounds missed). Fix small failures yourself; send larger ones to fresh fix
 implementers, until green.
 
-Create the branch and commit the product changes, then record
+Commit what the chunk commits do not already hold, then record
 `git rev-parse HEAD`; UI evidence must render that commit. A temporary
 uncommitted harness may sit on top of it only as allowed by `ui-evidence`, and
 must be removed before push.
 
-For every user-visible change, load `pr-media-upload` and run the capture
-yourself, even when a chunk returned candidate shots. The result is the evidence
-report `ui-evidence` defines, for the recorded HEAD. A report missing a field is an
-incomplete gate: continue capture or stop the run.
+For every user-visible change, the gate's result is the evidence report
+`ui-evidence` defines, for the recorded HEAD. A report missing a field is an
+incomplete gate: continue capture or stop the run. Build it from the chunks'
+reports. A chunk's shot stands for HEAD when
+`git diff --quiet <chunk commit> HEAD -- <files that render it>` passes; check
+each report's fields and open at most two shots. Every shot that fails the diff,
+and every state no chunk shot, is re-shot by one fresh capture implementer
+(`description: "capture #<n>"`), given the `UI evidence contract`, the recorded
+HEAD, and the chunks' capture scripts to reuse. Capture in your own session only
+when one existing script, run once, covers it: in the epic #769 runs,
+orchestrators that wrote their own capture and seed scripts spent 3–6M cache-read
+tokens on it at full context.
 
 Before the PR, harvest the handoffs' *Repo gotchas*. A fact a future run should
 know goes into `<repo>/.claude/ship-issue/repo-notes.md`, folded into the section
@@ -345,9 +365,10 @@ round and the finding's severity (`[critical]`, `[high]`, `[medium]`, `[low]`):
   findings.
 - **No round 3.** Push round 2's fixes and hand over without another review.
 
-Fix small findings yourself; the rest go to one **fresh** review-fix implementer
-for the round — never a `SendMessage` to a chunk's agent; push, and refresh
-any shots the fixes changed. After each round, post one PR comment headed
+Fix a finding yourself only when its fix is an edit to the lines the finding
+quotes and needs no further reading; the rest go to one **fresh** review-fix
+implementer for the round — never a `SendMessage` to a chunk's agent. Push, and
+have a capture implementer refresh any shots the fixes changed. After each round, post one PR comment headed
 `Review round N (<reviewer>)`: every finding with its disposition — fixed
 (commit), invalid (the evidence), or "deferred: <severity>" for a valid one below
 the round's bar. Deferred findings go in the handover report.
@@ -364,8 +385,9 @@ Report to the human: the PR URL, the criteria checklist with each item's status,
 test status, review outcomes, and anything open. Log `run-end`, then run
 `scripts/usage-report.sh --run <id>` and add its friction line to the report:
 implementers that failed or returned no handoff, verify failures, review rounds,
-and findings. A
-number that recurs across runs is a defect in a prompt or a script, not bad luck —
+findings, and `orch%`, this session's share of the run's cache reads. Above
+about 50% on a standard or deep run, the orchestrator did work that belonged to
+an implementer: say which step. A number that recurs across runs is a defect in a prompt or a script, not bad luck —
 name it when you see it, with the ledger row that shows it. Under `ship-epic`, the
 same report is the issue comment described in AFK mode, posted last. Never merge —
 the human does.
