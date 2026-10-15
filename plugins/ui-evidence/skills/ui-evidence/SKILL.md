@@ -97,7 +97,9 @@ as behavioral evidence, but cannot occupy `published:` or justify skipping a rou
 - **Publish before you delete.** Upload each image with `pr-media-upload` and record
   the URL first; a deleted PNG means retaking the shot from scratch.
 - Tear down what you built: harness route, capture script, images, dev server.
-  `git status` shows nothing from the capture — check, don't assume.
+  `git status` shows nothing from the capture — check, don't assume. When a parent
+  workflow asks you to keep the capture script for a re-shoot, move it outside the
+  repo to the path it names instead of deleting it.
 
 ## Embedding
 
