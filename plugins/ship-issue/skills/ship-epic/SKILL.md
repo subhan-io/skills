@@ -173,8 +173,10 @@ can be deferred: load each `t3-code` tool this step names before its first call.
   `parentThreadId` is this thread's id: every run reports to it. From its
   `providers`, take the Claude provider instance and its Sonnet model id. When
   the tools are absent, stop and report: AFK needs a T3 Code build with the V2
-  orchestrator. Launch also requires this thread to run in full-access, default
-  mode.
+  orchestrator. A launched thread cannot run with broader modes than this one,
+  and a run merges unattended, so the result's `runtimeMode` must be
+  `full-access` and its `interactionMode` `default`; otherwise stop and ask the
+  human to switch this thread's modes.
 - **Launch.** One `t3_thread_launch` per pick:
 
   ```json
@@ -213,12 +215,15 @@ can be deferred: load each `t3-code` tool this step names before its first call.
   exists, create one with `schedule_task`: title `ship-epic #<epic> heartbeat`,
   schedule `{"type":"interval","everyMs":3600000}`, bound to this thread, prompt
   "ship-epic heartbeat for epic #<epic>: check every in-flight run." On a
-  heartbeat turn, `t3_thread_read` each in-flight thread:
+  heartbeat turn, call `t3_thread_list` with `titleContains: "ship-issue #"`,
+  `settled: false` and `statuses: ["failed", "interrupted", "cancelled"]` to
+  find the runs that died, then `t3_thread_read` each other in-flight thread:
   - `pendingRequestCount > 0`: the run waits on a question that AFK cannot
     answer. Park its sub-issue for an attended tick.
   - status `failed`, `interrupted` or `cancelled`: the run stopped short.
   - idle with no report: read its last messages. A run waiting on background
-    work (an implementer, a review) says so; any other idle run stopped short.
+    work (an implementer, a review, a `watch_pull_request` wake for CI) says
+    so; any other idle run stopped short.
 
   A run that stopped short is a failure (step 5). Interrupt nothing that is
   still working.
@@ -227,11 +232,13 @@ can be deferred: load each `t3-code` tool this step names before its first call.
   cause has cleared, `t3_thread_send` its thread (mode `queue`) a message naming
   the cause and telling it to continue from `run-state.md`. It keeps its
   worktree, PR and run id, and reports again when it finishes.
-- **Settle the thread once its handoff is complete.** When a report says
-  `outcome=merged`, call `t3_thread_wait` on its thread (the report was the
-  run's last action, so its turn ends within moments), then
-  `t3_thread_organize` with `action: "settle"`. When the wait returns
-  `timedOut: true`, leave the thread unsettled and say so. A run that stopped
+- **Settle the thread once its handoff is complete.** The run links its PR to
+  its own thread, and T3 settles a thread when its linked PR merges. When a
+  report says `outcome=merged`, call `t3_thread_wait` on its thread (the report
+  was the run's last action, so its turn ends within moments), then
+  `t3_thread_organize` with `action: "settle"`; when T3 already settled it, there
+  is nothing more to do. When the wait returns `timedOut: true`, leave the thread
+  unsettled and say so. A run that stopped
   short — `outcome=stopped` or `pr-open`, not-AFK-eligible, a failed gate —
   keeps its thread unsettled: the marker is the sidebar's record that it needs
   a human, and its transcript is where they read why.

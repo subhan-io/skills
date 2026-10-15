@@ -55,12 +55,20 @@ the run merges its own PR. The rules that change:
   chunk found.
 - **Review**: step 7's rounds apply as written. A valid critical or high finding
   from round two that a fix cannot clear stops the run unmerged.
-- **Merge**: when the last round's fixes are pushed, wait for CI with
-  `scripts/ci-wait.sh --repo <owner/name> --pr <n>` (in the background; it
-  blocks until the head commit's checks settle and prints one line). On `green`,
-  merge — `gh pr merge <n> -R <owner/name> --squash --delete-branch`; the `-R`
-  skips the local checkout of the base, which fails in a worktree — and log
-  `run-end outcome=merged`. `red` or `timeout` hands over as usual, unmerged.
+- **Merge**: when the last round's fixes are pushed, wait for CI. When the
+  `t3-code` MCP server exposes `watch_pull_request`, call it on the PR and end
+  the turn: T3 wakes this thread when a check fails, the required checks pass,
+  someone else comments, or the branch starts to conflict with its base. A wake
+  is news, not a merge decision, so on every wake run
+  `scripts/ci-wait.sh --repo <owner/name> --pr <n>`, which returns at once when
+  the head commit's checks have settled. A comment wake gets read and answered
+  like a review finding; a conflict wake goes to a fresh fix implementer. Without
+  the T3 tools, run `ci-wait.sh` in the background instead; it blocks until the
+  checks settle and prints one line. On `green`, merge —
+  `gh pr merge <n> -R <owner/name> --squash --delete-branch`; the `-R` skips the
+  local checkout of the base, which fails in a worktree — and log
+  `run-end outcome=merged`. `red` or `timeout` hands over as usual, unmerged:
+  call `unwatch_pull_request` first, so the thread returns to the human's inbox.
 - The handover report (step 8) still happens in full — it is the only record the
   human gets.
 - **Under `ship-epic`** (the launch message says so): the PR opens against the
@@ -68,8 +76,12 @@ the run merges its own PR. The rules that change:
   into a non-default branch does not close the issue, so close it yourself after
   the merge: the epic thread reads a closed issue as merged. The handover goes up
   as a comment on the issue after `run-end` and `usage-report.sh`. The run's
-  **last action** is the `t3_thread_send` report the launch message specifies:
-  it wakes the epic thread, which settles this thread on `outcome=merged`. A run
+  **last action** is the `t3_thread_send` report the launch message specifies,
+  with a `clientRequestId` of `ship-issue-<n>-<run id>-report-<k>`, where `<k>`
+  counts this run's reports (1, then 2 after a resume; keep it in
+  `run-state.md`), so a retried send does not report twice. It wakes the epic
+  thread. T3 settles this thread when its linked PR merges, and the epic thread
+  settles it if T3 has not. A run
   that stops short posts the comment and sends the report too.
 - **Resume.** A stopped run that is sent a resume message continues from
   `run-state.md` under the run id it already has: no second `run-start`. It

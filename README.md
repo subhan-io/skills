@@ -119,8 +119,9 @@ status table and the eligible picks in one call. `/ship-epic afk` instead launch
 each pick as its own T3 Code sidebar thread in its own worktree (via the `t3-code` MCP
 server's `t3_thread_launch`; needs a T3 Code build with the V2 orchestrator), runs the
 light/standard gates unattended, and merges each review-ready PR into the epic branch until
-the whole feature is in. Each run reports back to the epic thread with `t3_thread_send`, and
-an hourly scheduled heartbeat catches runs that stop without reporting. An issue labeled
+the whole feature is in. Each run waits for CI through T3's `watch_pull_request`, reports
+back to the epic thread with `t3_thread_send`, and an hourly scheduled heartbeat catches runs
+that stop without reporting. An issue labeled
 `hitl` is completed as a checkpoint and stops the run from advancing to later issues.
 
 ### plan-explainer
