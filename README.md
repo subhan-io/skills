@@ -148,6 +148,28 @@ Uploads a screenshot, GIF, video, or HTML demo to a public S3 bucket and prints 
 for a GitHub PR, issue, or comment. Requires logged-in `infisical` and the AWS CLI. Uploads are
 public and permanent; never upload secret or personal material.
 
+### pstack
+
+Lauren Tan's [pstack](https://github.com/cursor/plugins/tree/main/pstack) ported from Cursor
+to T3 Code. It lives in its own repo, [subhan-io/pstack](https://github.com/subhan-io/pstack),
+so upstream changes can still be merged in. This catalog lists it as a github-source plugin for
+Claude Code only:
+
+```text
+/plugin install pstack@subhan-skills
+```
+
+Codex does not install it from here, because this Codex catalog lists only local plugins. Codex
+uses the pstack repo as its own marketplace:
+
+```sh
+codex plugin marketplace add subhan-io/pstack
+codex plugin add pstack@pstack
+```
+
+The update-skills script updates the Claude install along with the other plugins. To update
+the Codex install, run `codex plugin marketplace upgrade pstack`.
+
 ## Checks
 
 CI runs `shellcheck -S warning` on every script and `tests/ship-issue-scripts.sh`, a fixture
