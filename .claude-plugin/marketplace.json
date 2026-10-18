@@ -62,6 +62,13 @@
       "description": "Update every subhan-skills plugin to the latest marketplace version in both Claude Code and Codex, via each CLI's native plugin commands.",
       "author": { "name": "Subhan Mahmood" },
       "keywords": ["plugins", "marketplace", "update", "claude", "codex"]
+    },
+    {
+      "name": "pstack",
+      "source": { "source": "github", "repo": "subhan-io/pstack" },
+      "description": "Lauren Tan's pstack ported to T3 Code: poteto-mode, playbooks, principles, and multi-model panels (interrogate, arena, swarm) that fan out across Claude, Grok, and Codex through T3 orchestration.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["pstack", "poteto-mode", "t3-code", "subagents", "code-review"]
     }
   ]
 }
