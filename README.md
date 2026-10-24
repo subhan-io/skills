@@ -108,6 +108,39 @@ Claude Code only, since implementers are Agent-tool subagents. Uses the plan-exp
 ui-evidence plugins and OpenAI's `codex` Claude Code plugin (`/codex:adversarial-review`) —
 install those alongside it.
 
+Scripts enforce the rules that a model could skip. `scripts/pr-open.sh` refuses to open a PR
+from a dirty tree, from the base branch, without a leading `Closes #<n>`, or against the
+default branch when the issue's epic has an `epic/<p>` branch. `scripts/merge.sh` (AFK only)
+refuses a draft PR, a PR with no settled review round, or commits added after round 1 with
+no round 2. It then waits for green CI and merges only the head commit that passed. A
+PreToolUse hook (`hooks/fable-guard.sh`) denies any subagent, T3 thread or delegated task
+that names a Fable model. To allow Fable for one run, `touch ~/.config/ship-issue/allow-fable`,
+and delete the file afterwards.
+
+**Experiments.** Two choices run as A/B experiments: `impl` (implement a single-chunk run
+inline, or delegate it to a Sonnet implementer) and `plan` (plan a deep-tier run inline, or
+delegate it to an Opus planner). `scripts/arm.sh` assigns each run an arm from a hash of its
+run id and logs it to the ledger. `scripts/usage-report.sh --by-arm` compares the arms on
+finished runs: merge rate, cache reads, orchestrator share, duration, review rounds and
+findings. It leaves out eval runs and forced arms.
+
+**Evals.** With `eval` in the invocation (`eval.md`), a run reads its issue but publishes
+nothing: no push, no PR, no comment, and review runs locally. Two harnesses use this mode:
+
+```sh
+# Fixture cases: tiny repos, one case per arm. Runs need the sandbox (bubblewrap + socat).
+claude plugin eval plugins/ship-issue --scaffold --trust-plugin \
+  --allow-tools Bash Edit Write Agent --ablation none [--tag light|deep] [--runs 3]
+
+# Replays of closed issues in a real repo, graded against the PR that shipped them.
+plugins/ship-issue/evals/replay.sh run --repo <checkout> --issue <n> --arm impl=inline [--dry-run]
+plugins/ship-issue/evals/replay.sh grade ~/.local/state/ship-issue/replays/<n>-<stamp>
+plugins/ship-issue/evals/replay.sh report
+```
+
+`plugins/ship-issue/.claude-plugin/plugin.json` exists only so that `claude plugin eval` and
+`--plugin-dir` can find the plugin. Installs use the root marketplace entry.
+
 The plugin also carries `/ship-epic`, a thin wrapper for epics with native sub-issues. The
 epic builds on an integration branch, `epic/<n>`: every sub-issue branches from it and opens
 its PR against it, so parallel sub-issues are ordinary siblings and the base branch receives
@@ -173,4 +206,5 @@ the Codex install, run `codex plugin marketplace upgrade pstack`.
 ## Checks
 
 CI runs `shellcheck -S warning` on every script and `tests/ship-issue-scripts.sh`, a fixture
-test of the ledger, usage report and review fallback. Run both locally before pushing.
+test of the ledger, usage report, review fallback, A/B arms, `merge.sh`, `pr-open.sh` and the
+Fable hook. Run both locally before pushing.

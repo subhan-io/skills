@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: light-inline
+context:
+  scaffold_script: fixture.sh
