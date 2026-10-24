@@ -3,6 +3,7 @@
 #
 #   ledger.sh event=run-start issue=397 repo=owner/name tier=standard cwd="$PWD"
 #   ledger.sh event=phase run=<id> issue=397 phase=plan-approved
+#   ledger.sh event=run-start issue=397 tier=light mode=eval cwd="$PWD"  # an eval replay
 #   ledger.sh event=run-end run=<id> issue=397 outcome=pr-open pr=443 chunks=2 \
 #             reviewRounds=1 findingsValid=2 findingsInvalid=1 verifyRetries=0
 #   ledger.sh event=run-start issue=epic-525 tier=epic        # a ship-epic tick
@@ -87,8 +88,8 @@ esac
 # step the skill doesn't have, and it breaks usage-report.sh's per-step attribution.
 if [ "$event" = "phase" ]; then
   case "$phase" in
-    plan-approved|planner-done|verify-failed|review-requested|review-settled) ;;
-    *) echo "ledger.sh: unknown phase '$phase' (allowed: plan-approved planner-done verify-failed review-requested review-settled)" >&2
+    plan-approved|planner-done|verify-failed|review-requested|review-settled|arm) ;;
+    *) echo "ledger.sh: unknown phase '$phase' (allowed: plan-approved planner-done verify-failed review-requested review-settled arm)" >&2
        exit 1 ;;
   esac
   if [ "$phase" = "plan-approved" ] && [ -n "$run_id" ] && [ -f "$LEDGER" ] \

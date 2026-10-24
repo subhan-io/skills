@@ -2,7 +2,7 @@
 # usage-report.sh — what each ship-issue run cost, joined from the ledger and the
 # session logs both harnesses leave on disk.
 #
-#   usage-report.sh [--since 2026-08-18] [--run <id>] [--json]
+#   usage-report.sh [--since 2026-08-18] [--run <id>] [--json | --by-arm]
 #
 # --run narrows the report to one run, ignoring --since: the hand-over step prints
 # that run's friction (verify failures, review rounds, findings) beside its cost.
@@ -31,6 +31,12 @@
 #     subtracted from the outer run, so the tick row shows only the tick's own
 #     turns.
 #   - Phase events (event=phase) are listed per run in --json output.
+#   - Experiments: `arms` holds each arm.sh assignment as experiment:arm (a
+#     trailing `!` marks an arm the human or an eval case forced). --by-arm
+#     prints one row per mode (prod or eval), experiment and arm instead of one
+#     row per run, over finished runs whose arm was not forced: runs, merged,
+#     medians of cache reads, orch% and minutes, review rounds, valid findings
+#     and verify failures. Compare arms on this table, never on one run.
 #   - Review rounds: `reviewers` lists who settled each round (codex, or claude
 #     when review.sh fell back on a spent Codex quota). Codex reviews run
 #     ephemeral and leave no session log, so their cost is not on disk; a Claude
@@ -60,12 +66,14 @@ claude_project_dirs() {
 
 SINCE="$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
 AS_JSON=false
+BY_ARM=false
 RUN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --since) case "$2" in *T*) SINCE="$2" ;; *) SINCE="$2T00:00:00Z" ;; esac; shift 2 ;;
     --run) RUN="$2"; SINCE="1970-01-01T00:00:00Z"; shift 2 ;;
     --json) AS_JSON=true; shift ;;
+    --by-arm) BY_ARM=true; shift ;;
     *) echo "usage-report.sh: unknown argument $1" >&2; exit 1 ;;
   esac
 done
@@ -98,6 +106,7 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
              | map(max_by((toks // {} | .total_tokens) // -1))) as $sess   # per session: cumulative totals, skip null rows
       | {run: ($s.run // null), issue: ($s.issue|tostring), tier: ($s.tier // "?"),
          cwd: ($s.cwd // ""), claudeSession: ($s.claudeSession // null), model: ($s.model // null),
+         mode: ($s.mode // "prod"),
          start: $s.ts, end: ($e.ts // $now), open: ($e == null),
          durationMin: ((((($e.ts // $now) | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime)
                         - ($s.ts | sub("Z$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime)) / 60) | round),
@@ -107,7 +116,12 @@ runs="$(jq -s --arg since "$SINCE" --arg now "$NOW" '
          verifyRetries: ($e.verifyRetries // null),
          phases: ([$ev[] | select(.event == "phase") | select(belongs($s; $e))
                          | {phase, ts, round: (.round // null), chunk: (.chunk // null),
-                            reviewer: (.reviewer // null), reviewUsage: (.reviewUsage // null)}]),
+                            reviewer: (.reviewer // null), reviewUsage: (.reviewUsage // null),
+                            experiment: (.experiment // null), arm: (.arm // null),
+                            forced: (.forced // null)}]),
+         arms: ([$ev[] | select(.event == "phase" and .phase == "arm") | select(belongs($s; $e))
+                 | {key: .experiment, value: {arm, forced: (.forced == true)}}]
+                | unique_by(.key) | from_entries),
          errors: ([$cx[] | select(.exitCode != 0) | {role, ts, exitCode, error: (.error // "")}]),
          codexFailures: ([$cx[] | select(.exitCode != 0)] | length),
          verifyFailed: ([$ev[] | select(.event == "phase" and .phase == "verify-failed") | select(belongs($s; $e))] | length),
@@ -186,17 +200,43 @@ if $AS_JSON; then
   exit 0
 fi
 
+if $BY_ARM; then
+  echo "ship-issue experiment arms since $SINCE  (finished runs, forced arms excluded)"
+  jq -r '
+    def median: sort | if length == 0 then null else .[(length / 2 | floor)] end;
+    def m: if . == null then "-" else tostring | if (.|length) > 6 then (.[0:-6] + "." + .[-6:-5] + "M") else . end end;
+    (["mode","experiment","arm","runs","merged","med-cread","med-orch%","med-min","rr/run","valid/run","vfail"] | @tsv),
+    ([.[] | select(.open | not) | . as $r | .arms | to_entries[]
+          | select(.value.forced | not)
+          | {mode: $r.mode, exp: .key, arm: .value.arm, r: $r}]
+     | group_by([.mode, .exp, .arm])[]
+     | (map(.r)) as $rs
+     | [.[0].mode, .[0].exp, .[0].arm, ($rs | length),
+        ($rs | map(select(.outcome == "merged" or .outcome == "pr-open")) | length),
+        ($rs | map(.claude.cache_read) | median | m),
+        ($rs | map(select(.claude.cache_read > 0) | (.claude.orch_cache_read * 100 / .claude.cache_read | floor)) | median // "-"),
+        ($rs | map(.durationMin) | median // "-"),
+        ($rs | map(.reviewRounds // 0) | (add / length * 10 | round / 10)),
+        ($rs | map(.findingsValid // 0) | (add / length * 10 | round / 10)),
+        ($rs | map(.verifyFailed) | add)] | @tsv)
+  ' <<<"$report" | if command -v column >/dev/null 2>&1; then column -t -s $'\t'; else awk -F'\t' '{for (i=1;i<=NF;i++) printf "%-12s", $i; print ""}'; fi
+  exit 0
+fi
+
 echo "ship-issue runs since $SINCE  (cl-join: session = exact transcript, window = cwd+time fallback, may double count overlaps)"
 jq -r '
   def m: tostring | if (.|length) > 6 then (.[0:-6] + "." + .[-6:-5] + "M") else . end;
   def models: to_entries | map((.key | sub("^claude-"; "")) + ":" + (.value|tostring)) | join(" ") | if . == "" then "-" else . end;
   def reviewers: [.phases[] | select(.phase == "review-settled") | (.reviewer // "codex")]
                  | join(",") | if . == "" then "-" else . end;
-  (["issue","tier","start","min","outcome","chk","rr","reviewers","vfail","find-ok/bad","cl-cread","orch%","cl-cwrite","cl-out","cl-models","cl-join"] | @tsv),
-  (.[] | [.issue, .tier, (.start[0:16] + " "), .durationMin, .outcome,
+  def arms: (.arms // {}) | to_entries | map(.key + ":" + .value.arm + (if .value.forced then "!" else "" end))
+            | join(",") | if . == "" then "-" else . end;
+  (["issue","tier","start","min","outcome","chk","rr","reviewers","vfail","find-ok/bad","arms","cl-cread","orch%","cl-cwrite","cl-out","cl-models","cl-join"] | @tsv),
+  (.[] | [(if .mode == "eval" then .issue + "(eval)" else .issue end), .tier, (.start[0:16] + " "), .durationMin, .outcome,
           (.chunks // "-"), (.reviewRounds // "-"), reviewers,
           .verifyFailed,
           ((.findingsValid // "-"|tostring) + "/" + (.findingsInvalid // "-"|tostring)),
+          arms,
           (.claude.cache_read|m),
           (if .claude.join == "session" and .claude.cache_read > 0
            then ((.claude.orch_cache_read * 100 / .claude.cache_read | floor | tostring) + "%") else "-" end),

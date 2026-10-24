@@ -1,0 +1,17 @@
+{
+  "description": "Deny subagents, delegated tasks and T3 threads that would run on Fable.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task|mcp__t3.code__(t3_thread_launch|t3_thread_configure|delegate_task|create_threads)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${CLAUDE_PLUGIN_ROOT}\"; [ -f \"$d/hooks/fable-guard.sh\" ] || d=\"$d/plugins/ship-issue\"; bash \"$d/hooks/fable-guard.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

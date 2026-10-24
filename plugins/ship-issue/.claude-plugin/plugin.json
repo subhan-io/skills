@@ -1,0 +1,5 @@
+{
+  "name": "ship-issue",
+  "description": "Ship one GitHub issue or adhoc task to a finished PR, or drain an epic's sub-issues. This manifest serves `claude plugin eval` and `--plugin-dir`; installs go through the marketplace entry at the repository root.",
+  "author": { "name": "Subhan Mahmood" }
+}

@@ -5,8 +5,9 @@ description: Ship one GitHub issue or adhoc task to a finished PR — tiered pla
 
 # Ship one issue
 
-One issue in, one finished PR out. The human merges; you never do. Implementer
-subagents write all code — you orchestrate, question, plan, and verify.
+One issue in, one finished PR out. The human merges, except in AFK mode. You
+orchestrate, question, plan, and verify; implementer subagents write most of the
+code, and step 5 says when you write it yourself.
 
 **Cost is turns × context.** That buys four standing rules:
 
@@ -20,13 +21,12 @@ subagents write all code — you orchestrate, question, plan, and verify.
   `subagent_type: general-purpose` and `model: sonnet` (a model the human names
   replaces it). A continued agent replays its whole history every turn; the one
   sanctioned `SendMessage` continuation is the verify-failure follow-up in step 5.
-- Implementers run on `sonnet`, the deep-tier planner (step 4) on `opus`.
-  **Never run a subagent or dispatched thread on Fable unless the human explicitly
-  asked for Fable on that run.** A Fable loop costs several times an Opus planner,
-  and the ledger's model column will show it. Every dispatch names its model in
-  chat before it starts, one line, e.g. `Dispatching chunk 2 implementer for #606
-  on sonnet`. A dispatch the human cannot see the model of is a dispatch they
-  cannot stop in time.
+- Implementers run on `sonnet`, the deep-tier planner (step 4) on `opus`. Fable
+  runs only when the human asked for it on this run: a Fable loop costs several
+  times an Opus one, and the plugin's hook denies a Fable dispatch. Every dispatch
+  names its model in chat before it starts, one line, e.g. `Dispatching chunk 2
+  implementer for #606 on sonnet`: a dispatch the human cannot see the model of is
+  one they cannot stop in time.
 
 Two human gates, in order: **criteria and tier confirmed** (step 2) and **plan
 approved** (step 4). Light work takes them as one: the criteria question carries
@@ -38,69 +38,22 @@ When reality diverges from the plan, stop for the human only if the divergence
 changes the scope or the criteria — that decision is theirs. Otherwise adapt, note
 the change in `run-state.md`, and report it at handover.
 
-## AFK mode
+## AFK and eval modes
 
-When the invocation says `afk`, the run is unattended: both gates self-resolve and
-the run merges its own PR. The rules that change:
-
-- **Eligibility.** Any tier, when you can state the criteria confidently from
-  the issue body and comments. When you cannot, the issue is not AFK-eligible —
-  stop and report why instead of guessing. Fail closed.
-- **Gate 1**: derive the criteria from the issue; log them in the run-start report
-  instead of asking. **Step 3**: an open question with no answer in the issue is an
-  eligibility failure, not a guess. **Gate 2**: self-approve the plan (deep tier:
-  the Opus planner's plan); a plan that should split becomes a split proposal,
-  reported back, never executed. **Step 5**: a `replan` that keeps the scope and
-  criteria continues; one that changes either stops the run — report what the
-  chunk found.
-- **Review**: step 7's rounds apply as written. A valid critical or high finding
-  from round two that a fix cannot clear stops the run unmerged.
-- **Merge**: when the last round's fixes are pushed, wait for CI. When the
-  `t3-code` MCP server exposes `watch_pull_request`, call it on the PR and end
-  the turn: T3 wakes this thread when a check fails, the required checks pass,
-  someone else comments, or the branch starts to conflict with its base. A wake
-  is news, not a merge decision, so on every wake run
-  `scripts/ci-wait.sh --repo <owner/name> --pr <n>`, which returns at once when
-  the head commit's checks have settled. A comment wake gets read and answered
-  like a review finding; a conflict wake goes to a fresh fix implementer. Without
-  the T3 tools, run `ci-wait.sh` in the background instead; it blocks until the
-  checks settle and prints one line.
-  - `green`: merge — `gh pr merge <n> -R <owner/name> --squash --delete-branch`;
-    the `-R` skips the local checkout of the base, which fails in a worktree —
-    and log `run-end outcome=merged`.
-  - `red`: the line's `log=<file>` holds the failed steps' output; read it
-    rather than querying `gh run view`. A failure the branch caused goes to a
-    fresh fix implementer, then CI runs again, once.
-  - A second `red`, a `red` from a cause outside the branch, or `timeout`:
-    hand over as usual, unmerged. Call `unwatch_pull_request` first, so the
-    thread returns to the human's inbox.
-- The handover report (step 8) still happens in full — it is the only record the
-  human gets.
-- **Under `ship-epic`** (the launch message says so): the PR opens against the
-  epic's integration branch, `epic/<n>`, and the merge above lands there. A merge
-  into a non-default branch does not close the issue, so close it yourself after
-  the merge: the epic thread reads a closed issue as merged. The handover goes up
-  as a comment on the issue after `run-end` and `usage-report.sh`. The run's
-  **last action** is the `t3_thread_send` report the launch message specifies,
-  with a `clientRequestId` of `ship-issue-<n>-<run id>-report-<k>`, where `<k>`
-  counts this run's reports (1, then 2 after a resume; keep it in
-  `run-state.md`), so a retried send does not report twice. It wakes the epic
-  thread. T3 settles this thread when its linked PR merges, and the epic thread
-  settles it if T3 has not. A run
-  that stops short posts the comment and sends the report too.
-- **Resume.** A stopped run that is sent a resume message continues from
-  `run-state.md` under the run id it already has: no second `run-start`. It
-  logs a second `run-end` when it finishes, and the report takes the last one.
+When the invocation says `afk`, read `afk.md` in this skill's directory before
+step 1: the run is unattended, both gates self-resolve, and it merges its own PR.
+When it says `eval`, read `eval.md` too: the run replays a task so two versions
+or two experiment arms can be compared, and publishes nothing.
 
 ## The ledger
 
 Every run writes usage events to a machine-central ledger
 (`~/.local/state/ship-issue/ledger.jsonl`) so a later session can audit what runs
-cost: `scripts/usage-report.sh` joins it against the session logs on disk.
-None of these writes are skippable:
+cost: `scripts/usage-report.sh` joins it against the session logs on disk, and
+it cannot attribute a cost it has no event for. Every run makes these writes:
 
 - `scripts/ledger.sh event=run-start issue=<n> repo=<owner/name> tier=<tier> cwd="$PWD"`
-  — at gate 1. It **prints a run id**; keep it and stamp `run=<id>` on every later
+  (plus `mode=eval` in eval mode) — at gate 1. It **prints a run id**; keep it and stamp `run=<id>` on every later
   ledger event. The issue must be real (an adhoc slug is fine; `0` or empty is
   rejected). `ledger.sh` records this session's transcript and its model from
   `cwd`; `usage-report.sh` counts every implementer and planner from that
@@ -111,7 +64,8 @@ None of these writes are skippable:
   Plan agent returns (its Opus cost is invisible to the ledger otherwise);
   `phase=verify-failed chunk=<i>` on each failed chunk verify. Always with
   `run=<id> issue=<n>`. `scripts/review.sh` logs each review round's
-  `review-requested` and `review-settled` itself. `ledger.sh` rejects phase
+  `review-requested` and `review-settled` itself, and `scripts/arm.sh` logs each
+experiment's `phase=arm` (steps 4 and 5). `ledger.sh` rejects phase
   names outside this set — an event it refuses is a step this skill doesn't have.
 - `scripts/ledger.sh event=run-end run=<id> issue=<n> outcome=<pr-open|merged|stopped|split>
   pr=<n> chunks=<n> reviewRounds=<n> findingsValid=<n> findingsInvalid=<n>
@@ -191,7 +145,7 @@ is to get right; the examples below are signals, not thresholds.
 |---|---|---|
 | **light** | a small, contained change; no schema or auth change, no UI redesign | bullet plan in the criteria question |
 | **standard** | most work | plan inline this session; `plan-explainer` page only when a mock or a fork benefits from being seen |
-| **deep** | the design is hard to get right: a schema migration, auth/payments/data deletion, work across app boundaries, a new subsystem | dispatch the Plan agent, `model: opus` |
+| **deep** | the design is hard to get right: a schema migration, auth/payments/data deletion, work across app boundaries, a new subsystem | a written plan; the `plan` experiment (step 4) decides who writes it |
 
 ## 3. Resolve open questions
 
@@ -218,10 +172,16 @@ paragraph goal plus a task list of children, with the build order stated). Then
 ship the first child in this session as its own run; the
 `ship-epic` skill drains the rest. Log the parent's run-end as `outcome=split`.
 
-Deep tier: dispatch the Plan agent (`model: opus`) with the issue, the confirmed
-criteria, the settled decisions, and file pointers — a tight prompt, not an
-invitation to wander the repo. Log `event=phase phase=planner-done` when it
-returns. You turn its plan into the presentation.
+Deep tier: who writes the plan is an experiment. Before planning, run
+`scripts/arm.sh --run <id> --issue <n> --experiment plan`; a human's explicit
+choice wins, passed as `--arm`.
+
+- `delegate`: dispatch the Plan agent (`model: opus`) with the issue, the
+  confirmed criteria, the settled decisions, and file pointers — a tight prompt,
+  not an invitation to wander the repo. Log `event=phase phase=planner-done` when
+  it returns, and turn its plan into the presentation.
+- `inline`: write the plan in this session, reading what the design needs. The
+  plan you present is then the plan you carry out, with no handoff between them.
 
 Present the plan (`plan-explainer` when it earns it, inline otherwise) and wait
 for explicit approval. Approval of the plan is
@@ -229,6 +189,19 @@ not approval of scope changes discovered later — those come back to the human.
 approval, log `event=phase phase=plan-approved`.
 
 ## 5. Implement — one fresh implementer per chunk
+
+**A plan of one chunk** is an experiment: run
+`scripts/arm.sh --run <id> --issue <n> --experiment impl` (a human's explicit
+choice wins, passed as `--arm`).
+
+- `delegate`: one implementer, as below.
+- `inline`: implement the chunk yourself in this session, held to `anti-slop.md`
+  and, for a UI chunk, to the `UI evidence contract` and its upload rule. Write
+  no prompt file and no handoff: fold what you learned into `run-state.md`
+  directly. Then verify and commit as below.
+
+A plan of two or more chunks delegates every chunk: each gets a fresh context,
+and `run-state.md` carries the facts between them.
 
 For each chunk, in order, write the prompt to `chunk-<i>.prompt.md` in the run
 directory: the chunk's spec, its criteria, its verify command, the epic context and
@@ -243,7 +216,7 @@ make published screenshots part of the deliverable. Do not launch a UI chunk
 whose prompt merely names or links the skill. Also tell the implementer to
 upload its shots without opening them, except one or two at the end to confirm
 the capture worked: every image an agent opens is replayed on each later turn,
-and implementers that opened 9–23 shots each ended near 250k tokens of context.
+so an implementer that opens every shot ends its chunk near a full context.
 The chunk's own implementer captures its shots; a separate capture agent shoots
 the same pixels twice. Tell it to keep its capture script, and any seed or probe
 script it needed, in the run directory as `chunk-<i>.capture.*`, and to list in
@@ -290,9 +263,8 @@ before anything else runs:
 
 Run the repo's full test suite and every check the touched apps' CI runs —
 read the workflow files, do not assume lint, typecheck and test cover them. A
-check that CI runs and this pass skips fails only after the PR opens (#553: a
-separate `lint:anti-slop` gate caught 52 warnings that three chunks and two
-review rounds missed). Fix small failures yourself; send larger ones to fresh fix
+check that CI runs and this pass skips fails only after the PR opens, where a fix
+costs a CI round and often a review round. Fix small failures yourself; send larger ones to fresh fix
 implementers, until green.
 
 Commit what the chunk commits do not already hold, then record
@@ -309,9 +281,9 @@ each report's fields and open at most two shots. Every shot that fails the diff,
 and every state no chunk shot, is re-shot by one fresh capture implementer
 (`description: "capture #<n>"`), given the `UI evidence contract`, the recorded
 HEAD, and the chunks' capture scripts to reuse. Capture in your own session only
-when one existing script, run once, covers it: in the epic #769 runs,
-orchestrators that wrote their own capture and seed scripts spent 3–6M cache-read
-tokens on it at full context.
+when one existing script, run once, covers it: an orchestrator that writes its own
+capture and seed scripts does that work at full context, several times the cost
+of a capture implementer.
 
 Before the PR, harvest the handoffs' *Repo gotchas*. A fact a future run should
 know goes into `<repo>/.claude/ship-issue/repo-notes.md`, folded into the section
@@ -322,14 +294,21 @@ merge duplicates. Commit that change on the
 branch by itself and name it in the PR body; a gotcha that surfaces later in a
 review-fix implementer rides that round's commit.
 
-After the evidence gate, verify that cleanup returned the tree to the recorded
-HEAD, then push and run `gh pr create` — with `--base epic/<n>` when `ship-epic`
-named an integration branch. The body opens with `Closes #<n>` (the epic
-survey finds the PR by it), then the confirmed criteria checklist, chunk summary
-and the evidence report. The PR is not open
-until this gate is complete. When the `t3-code` MCP server exposes
-`link_pull_request`, link the PR to this thread right after creating it, so the
-sidebar tracks its checks and merge.
+After the evidence gate, write the PR body — `Closes #<n>`, then the confirmed
+criteria checklist, chunk summary and the evidence report — and open the PR:
+
+```bash
+scripts/pr-open.sh --issue <n> --base <base> --title "<title>" --body-file <file>
+```
+
+`<base>` is the default branch, or `epic/<n>` when `ship-epic` named one. The
+script refuses while the tree holds uncommitted changes (the PR must be the
+commit the evidence rendered), while the body does not open with `Closes #<n>`
+(the epic survey finds the PR by it), and when a sub-issue of an epic with an
+integration branch names another base; its `refused` line says what to fix. It
+pushes and prints `opened <url>`, or `exists <url>` for a branch that already has
+a PR. When the `t3-code` MCP server exposes `link_pull_request`, link the PR to
+this thread right after, so the sidebar tracks its checks and merge.
 
 ## 7. Review — two rounds at most
 
@@ -389,5 +368,5 @@ findings, and `orch%`, this session's share of the run's cache reads. Above
 about 50% on a standard or deep run, the orchestrator did work that belonged to
 an implementer: say which step. A number that recurs across runs is a defect in a prompt or a script, not bad luck —
 name it when you see it, with the ledger row that shows it. Under `ship-epic`, the
-same report is the issue comment described in AFK mode, posted last. Never merge —
-the human does.
+same report is the issue comment described in `afk.md`, posted last. Outside AFK
+mode, never merge: the human does.
