@@ -65,6 +65,15 @@
       "keywords": ["plugins", "marketplace", "update", "claude", "codex"]
     },
     {
+      "name": "write-issue",
+      "source": "./",
+      "skills": ["./plugins/write-issue/skills/write-issue"],
+      "strict": false,
+      "description": "Write, publish and maintain GitHub issues on a project board: short contract-style bodies per kind, org issue fields set and read back after creation, and an upkeep survey for stale, orphaned and over-long issues.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["github", "issues", "projects", "triage"]
+    },
+    {
       "name": "pstack",
       "source": { "source": "github", "repo": "subhan-io/pstack" },
       "description": "Lauren Tan's pstack ported to T3 Code: poteto-mode, playbooks, principles, and multi-model panels (interrogate, arena, swarm) that fan out across Claude, Grok, and Codex through T3 orchestration.",

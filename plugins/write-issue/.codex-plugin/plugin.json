@@ -1,0 +1,21 @@
+{
+  "name": "write-issue",
+  "version": "0.1.0",
+  "description": "Write, publish and maintain GitHub issues on a project board, with org issue fields set and verified after creation.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["github", "issues", "projects", "triage"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Write Issue",
+    "shortDescription": "Short, contract-style GitHub issues with their board fields set.",
+    "longDescription": "Drafts issues per kind (feature, bug, task, research, epic), gates publishing and the ready-for-agent label on the human, sets Type, App, Execution, Priority, Size, Status and parent through GraphQL and reads them back, and surveys a board for stale, orphaned and over-long issues.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": ["GitHub", "Issues", "Projects"],
+    "websiteURL": "https://github.com/subhan-io/skills"
+  }
+}
