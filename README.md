@@ -175,6 +175,16 @@ Drives one Codex review round on a PR with `scripts/codex-wait.sh`: requests the
 until it has actually settled, reads only findings covering the head commit, and tracks
 `(resolver, round N)` resolution markers across rounds.
 
+### write-issue
+
+Writes, publishes and maintains GitHub issues on a project board. Bodies are short contracts
+per kind (feature, bug, task, research, epic): problem, done-when criteria, scope, with code
+and evidence left to the plan and to links. `scripts/issue-fields.sh` sets the org issue
+fields (Type, App, Execution, Priority), project Status and Size, and the native parent after
+`gh issue create`, then reads them back. `scripts/survey.sh` flags stale, orphaned and
+over-long issues for an upkeep pass. Each repo supplies its board notes in
+`.claude/write-issue/board.md`.
+
 ### pr-media-upload
 
 Uploads a screenshot, GIF, video, or HTML demo to a public S3 bucket and prints a permanent URL
