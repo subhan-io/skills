@@ -98,7 +98,8 @@ never closes open research. In an epic, research is its own child.
 
 ## Called by another skill
 
-When `to-issues`, `triage`, `ship-issue` or `ship-epic` hands you
-issues, the caller owns the breakdown; this skill owns the body, the fields and
-publishing. Run steps 1 to 5. The caller's own gate counts as step 4 when the
+When `to-issues`, `triage`, `port-journey`, `ship-issue` or `ship-epic` hands
+you issues, the caller owns the breakdown; this skill owns the body, the fields
+and publishing. Body content the caller requires (port-journey's design
+snapshot) stays in; the body rules govern the rest. Run steps 1 to 5. The caller's own gate counts as step 4 when the
 human saw the drafted bodies and fields there.
