@@ -185,6 +185,16 @@ fields (Type, App, Execution, Priority), project Status and Size, and the native
 over-long issues for an upkeep pass. Each repo supplies its board notes in
 `.claude/write-issue/board.md`.
 
+### sync-paper
+
+Carries UI changes merged straight in code back into an app's Paper artboards, for work that
+starts in Paper and sometimes changes in code. It triages the commits since the last sync, gives
+each mapped artboard a verdict, and patches stale layers in place, keeping sample data and
+leaving `(not built)` designs alone. What it cannot patch safely becomes an open item, stored
+with the synced commit in a "00 Sync" artboard. Requires the Paper MCP server and a running Paper
+client. Each repo supplies per-app maps in `.claude/sync-paper/maps/`, and optional preview notes
+in `.claude/sync-paper/notes.md`.
+
 ### pr-media-upload
 
 Uploads a screenshot, GIF, video, or HTML demo to a public S3 bucket and prints a permanent URL
