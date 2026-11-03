@@ -1,0 +1,30 @@
+{
+  "name": "sync-paper",
+  "version": "0.1.0",
+  "description": "Reflect UI changes merged straight in code back into an app's Paper artboards, editing existing layers in place.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": [
+    "paper",
+    "design",
+    "sync",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Sync Paper",
+    "shortDescription": "Carry code changes back into Paper artboards.",
+    "longDescription": "Triages the UI commits since the last sync, compares them with each mapped artboard, patches stale layers in place while keeping sample data, leaves unbuilt designs alone, and records the synced commit and open items in Paper.",
+    "developerName": "Subhan Mahmood",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Design",
+      "Paper",
+      "MCP"
+    ],
+    "websiteURL": "https://github.com/subhan-io/skills"
+  }
+}

@@ -74,6 +74,15 @@
       "keywords": ["github", "issues", "projects", "triage"]
     },
     {
+      "name": "sync-paper",
+      "source": "./",
+      "skills": ["./plugins/sync-paper/skills/sync-paper"],
+      "strict": false,
+      "description": "Reflect UI changes merged straight in code back into an app's Paper artboards: triage commits since the last sync, patch stale layers in place, leave unbuilt designs alone, and record open items. Each repo supplies per-app maps in .claude/sync-paper/maps/.",
+      "author": { "name": "Subhan Mahmood" },
+      "keywords": ["paper", "design", "sync", "mcp"]
+    },
+    {
       "name": "pstack",
       "source": { "source": "github", "repo": "subhan-io/pstack" },
       "description": "Lauren Tan's pstack ported to T3 Code: poteto-mode, playbooks, principles, and multi-model panels (interrogate, arena, swarm) that fan out across Claude, Grok, and Codex through T3 orchestration.",
