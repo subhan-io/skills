@@ -1,0 +1,13 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "write-issue",
+  "displayName": "Write Issue",
+  "version": "0.1.0",
+  "description": "Write, publish and maintain GitHub issues on a project board, with org issue fields set and verified after creation.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["github", "issues", "projects", "triage"]
+}

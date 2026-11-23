@@ -1,0 +1,13 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "sync-paper",
+  "displayName": "Sync Paper",
+  "version": "0.1.0",
+  "description": "Reflect UI changes merged straight in code back into an app's Paper artboards, editing existing layers in place.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["paper", "design", "sync", "mcp"]
+}

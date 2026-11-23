@@ -1,0 +1,13 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "plan-explainer",
+  "displayName": "Plan Explainer",
+  "version": "0.1.0",
+  "description": "Build and publish a self-contained HTML explainer page — UI mocks, decision cards, a Copy-answers button — for plan approval and visual questions.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["planning", "html", "mocks", "review"]
+}

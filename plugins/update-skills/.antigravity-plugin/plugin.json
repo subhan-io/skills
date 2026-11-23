@@ -1,0 +1,13 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "update-skills",
+  "displayName": "Update Skills",
+  "version": "0.1.0",
+  "description": "Update every subhan-skills plugin to the latest version in Claude Code, Codex, and Antigravity, via each CLI's native plugin commands.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["plugins", "marketplace", "update", "claude", "codex", "antigravity"]
+}

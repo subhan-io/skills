@@ -24,6 +24,8 @@ upload=~/.claude/skills/pr-media-upload/upload.sh
 
 On Claude's plugin path it's `"$CLAUDE_PLUGIN_ROOT"/skills/pr-media-upload/upload.sh`.
 Codex installs it below `~/.codex/plugins/cache/<marketplace>/pr-media-upload/`.
+Antigravity installs it below `~/.gemini/config/plugins/` (or `~/.gemini/config/skills/pr-media-upload/`
+on the `--agy` symlink install).
 In every host, the reliable option is the directory this file was loaded from. Set `$upload`
 once and reuse it; the examples below assume it.
 

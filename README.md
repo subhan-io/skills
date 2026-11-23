@@ -1,16 +1,44 @@
 # skills
 
-Personal agent workflows packaged for OMP, Codex, and Claude Code.
+Personal agent workflows packaged for Antigravity, OMP, Codex, and Claude Code.
 
 ```text
-plugins/<name>/skills/<name>/SKILL.md     # skill and its bundled resources
-plugins/<name>/package.json               # optional OMP extension manifest
-plugins/<name>/{agents,src}/               # optional OMP agents and extension code
-.omp-plugin/marketplace.json               # OMP marketplace catalog
-.agents/plugins/marketplace.json            # Codex marketplace catalog
-.claude-plugin/marketplace.json             # Claude Code marketplace catalog
-install.sh                                  # optional Claude skill symlinks
+plugins/<name>/skills/<name>/SKILL.md          # skill and its bundled resources
+plugins/<name>/.antigravity-plugin/plugin.json # optional Antigravity per-plugin manifest
+plugins/<name>/package.json                    # optional OMP extension manifest
+plugins/<name>/{agents,src}/                   # optional OMP agents and extension code
+.antigravity-plugin/plugin.json                # Antigravity bundle manifest (all compatible skills)
+.omp-plugin/marketplace.json                   # OMP marketplace catalog
+.agents/plugins/marketplace.json               # Codex marketplace catalog
+.claude-plugin/marketplace.json                # Claude Code marketplace catalog
+install.sh                                     # optional Claude / Antigravity skill symlinks
 ```
+
+## Install in Antigravity (`agy`)
+
+Install the full `subhan-skills` bundle (every Antigravity-compatible skill in this repo) in one command:
+
+```sh
+agy plugin install https://github.com/subhan-io/skills
+```
+
+Or install an individual plugin from its subdirectory:
+
+```sh
+agy plugin install https://github.com/subhan-io/skills/tree/main/plugins/pr-media-upload
+```
+
+Re-run the same `agy plugin install` command (or run `/update-skills`) to refresh an existing installation, and `agy plugin list` to inspect installed plugins and their skills. Plugins installed through `agy` live in `~/.gemini/config/plugins/` and are shared across Antigravity CLI, Antigravity App, Antigravity IDE, and T3 Code.
+
+For local development, install from a checkout or symlink directly into `~/.gemini/config/skills`:
+
+```sh
+agy plugin install "$PWD"
+# or symlink for live edits:
+./install.sh --agy
+```
+
+`ship-issue` (Claude Code `Agent`-tool subagents) and `ship-issue-omp` (`omp-only: true`) are intentionally excluded from the default Antigravity bundle.
 
 ## Install in OMP
 
@@ -73,8 +101,9 @@ Skills marked `omp-only: true` are intentionally excluded from these Claude syml
 1. Create `plugins/<name>/skills/<name>/SKILL.md` and its bundled resources.
 2. For OMP extension code or agents, add `package.json`, `src/`, and `agents/` as needed.
 3. Add a Codex `.codex-plugin/plugin.json` only when the workflow works under Codex.
-4. Register the plugin in the harness-specific marketplace catalogs it actually supports.
-5. Validate the plugin, skill, agents, and extension before pushing.
+4. Add an Antigravity `.antigravity-plugin/plugin.json` and append `"./plugins/<name>/skills"` to the root `.antigravity-plugin/plugin.json` when the workflow works under Antigravity.
+5. Register the plugin in the harness-specific marketplace catalogs it actually supports.
+6. Validate the plugin, skill, agents, and extension before pushing (including `agy plugin validate --strict` when `agy` is installed).
 
 ## Plugins
 
@@ -220,11 +249,18 @@ codex plugin marketplace add subhan-io/pstack
 codex plugin add pstack@pstack
 ```
 
+In Antigravity, install it directly from its repository:
+
+```sh
+agy plugin install https://github.com/subhan-io/pstack
+```
+
 The update-skills script updates the Claude install along with the other plugins. To update
 the Codex install, run `codex plugin marketplace upgrade pstack`.
 
 ## Checks
 
-CI runs `shellcheck -S warning` on every script and `tests/ship-issue-scripts.sh`, a fixture
+CI runs `shellcheck -S warning` on every script, `tests/ship-issue-scripts.sh` (a fixture
 test of the ledger, usage report, review fallback, A/B arms, `merge.sh`, `pr-open.sh` and the
-Fable hook. Run both locally before pushing.
+Fable hook), and `tests/antigravity-manifests.sh` (manifest schema, skill parity, `--agy`
+symlinks, and `update-skills.sh` Antigravity handling). Run all three locally before pushing.
