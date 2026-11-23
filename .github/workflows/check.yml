@@ -14,3 +14,5 @@ jobs:
         run: shellcheck -S warning $(git ls-files '*.sh')
       - name: ship-issue script tests
         run: bash tests/ship-issue-scripts.sh
+      - name: antigravity manifest tests
+        run: bash tests/antigravity-manifests.sh

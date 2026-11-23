@@ -1,30 +1,40 @@
 #!/usr/bin/env bash
-# install.sh — symlink every skill in this repo into ~/.claude/skills.
+# install.sh — symlink compatible skills in this repo into ~/.claude/skills
+# (or ~/.gemini/config/skills with --agy).
 #
-#   ./install.sh              # link all skills
+#   ./install.sh              # link all Claude-compatible skills into ~/.claude/skills
+#   ./install.sh --agy        # link all Antigravity-compatible skills into ~/.gemini/config/skills
 #   ./install.sh -n           # dry run: print what would change, touch nothing
 #   ./install.sh -f           # replace real directories (not just stale symlinks)
 #   ./install.sh ship-issue [...]   # link only the named skills
 #
 # Symlinks (not copies) so `git pull` in this repo updates every machine's skills at once.
-# The alternative install path — `/plugin marketplace add subhan-io/skills` — does not use
+# The alternative install paths — `/plugin marketplace add subhan-io/skills` (Claude) or
+# `agy plugin install https://github.com/subhan-io/skills` (Antigravity) — do not use
 # this script at all; see README.md.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
-DEST="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
+AGY=false
 DRY=false; FORCE=false; WANTED=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --agy) AGY=true ;;
     -n|--dry-run) DRY=true ;;
     -f|--force) FORCE=true ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     -*) echo "unknown flag: $1" >&2; exit 1 ;;
     *) WANTED+=("$1") ;;
   esac
   shift
 done
+
+if $AGY; then
+  DEST="${AGY_SKILLS_DIR:-$HOME/.gemini/config/skills}"
+else
+  DEST="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
+fi
 
 # If ~/.claude/skills is itself a symlink into this repo, per-skill links would be written
 # back into the working tree. Bail rather than pollute it.
@@ -46,13 +56,17 @@ for skill_md in "$REPO"/plugins/*/skills/*/SKILL.md; do
   src="$(dirname "$skill_md")"
   name="$(basename "$src")"
 
-  # OMP-only skills depend on native tools or extension state unavailable in Claude Code.
+  # OMP-only skills depend on native tools or extension state unavailable in Claude Code / Antigravity.
   grep -q '^omp-only: true$' "$skill_md" && continue
 
   if [ ${#WANTED[@]} -gt 0 ]; then
     match=false
     for w in "${WANTED[@]}"; do [ "$w" = "$name" ] && match=true; done
     $match || continue
+  elif $AGY; then
+    # Default --agy install links only plugins packaged for Antigravity.
+    plugin_dir="$(dirname "$(dirname "$src")")"
+    [ -f "$plugin_dir/.antigravity-plugin/plugin.json" ] || continue
   fi
 
   target="$DEST/$name"

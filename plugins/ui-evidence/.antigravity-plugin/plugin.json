@@ -1,0 +1,13 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "ui-evidence",
+  "displayName": "UI Evidence",
+  "version": "0.1.0",
+  "description": "Capture and publish screenshots or video that prove a UI change — accurate shell and commit, permanent URLs for the PR body.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["screenshots", "playwright", "pull-requests"]
+}

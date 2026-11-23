@@ -1,0 +1,13 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "codex-review",
+  "displayName": "Codex Review",
+  "version": "0.1.0",
+  "description": "Drive one Codex review round on a GitHub PR — request, wait until settled, read the head commit's findings, and track resolution markers.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["codex", "code-review", "github", "pull-requests"]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "subhan-skills",
+  "displayName": "Subhan Skills",
+  "version": "0.1.0",
+  "description": "Personal agent workflows and skills from subhan-io/skills.",
+  "author": {
+    "name": "Subhan Mahmood",
+    "url": "https://github.com/subhan-io"
+  },
+  "repository": "https://github.com/subhan-io/skills",
+  "keywords": ["skills", "github", "pull-requests", "issues", "planning", "code-review"],
+  "skills": [
+    "./plugins/codex-review/skills",
+    "./plugins/plan-explainer/skills",
+    "./plugins/pr-media-upload/skills",
+    "./plugins/sync-paper/skills",
+    "./plugins/ui-evidence/skills",
+    "./plugins/update-skills/skills",
+    "./plugins/write-issue/skills"
+  ]
+}
