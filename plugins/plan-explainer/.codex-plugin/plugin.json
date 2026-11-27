@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Plan Explainer",
     "shortDescription": "Visual plan and decision pages the human reviews from any device.",
-    "longDescription": "Fills a skeleton HTML page with UI mocks built from the app's real design tokens, before/after behavior, and open questions as selectable cards with a Copy-answers button, then publishes it to a permanent unlisted URL.",
+    "longDescription": "Builds a self-contained HTML page with UI mocks made from the app's real design tokens, before/after behavior, and open questions as selectable cards with a Copy-answers button, then publishes it to a permanent unlisted URL.",
     "developerName": "Subhan Mahmood",
     "category": "Developer Tools",
     "capabilities": ["Planning", "Mocks"],
