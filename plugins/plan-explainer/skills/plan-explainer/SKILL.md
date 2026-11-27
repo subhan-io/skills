@@ -14,34 +14,31 @@ One HTML page that lets the human approve or answer in one read. Show, don't
 describe: the page's mocks and cards are the review surface; chat carries only the
 URL and a summary.
 
-Copy `explainer-skeleton.html` (in this skill's directory) to your working file and
-fill every `FILL:` comment. The page is done when no `FILL:` comment remains and it
-opens as a complete page with no broken section. Then publish it with the
-`pr-media-upload` skill and put the URL on its own line at the top of your message,
-with the file path beside it. The URL is public but unlisted (random key, no auth,
-permanent) — keep secrets off the page, and say "unlisted, permanent" when handing
-it over.
+Write the page as one self-contained file (inline CSS and JS, nothing external),
+readable on a phone and in light and dark. Publish it with the `pr-media-upload`
+skill and put the URL on its own line at the top of your message, with the file
+path beside it. The URL is public but unlisted (random key, no auth, permanent) —
+keep secrets off the page, and say "unlisted, permanent" when handing it over.
 
-## Content rules
+## What the page covers
 
-- **Prose is ASD-STE100 Simplified Technical English.** One idea per sentence, under
-  20 words, active voice, present tense, the same word for the same thing every
-  time, exact code identifiers.
-- **Written for a strong engineer who knows this repo.** Open with the ask and the
-  confirmed acceptance criteria, then only what changes and the decisions behind it.
-  Skip the repo tour, the stack, and the toolchain.
-- **Show each piece of work.** UI work: static mocks built from the app's real
-  design tokens, light and dark, with declined alternatives beside the planned one.
-  Everything else: before/after behavior. Plain code excerpts appear only where a
-  decision turns on them.
-- **Ask via the form, not prose.** Each unsettled fork is a question block beside
-  the mocks that show its options: selectable cards (mock cards where the question
-  is visual, text where it is not), an optional note field, and the sticky one-line
-  **Copy answers** button that copies every question and chosen answer as plain
-  text. The human pastes that block back into chat — never re-ask the same
-  questions as chat prose.
-- Consolidate every decision already made in the endnotes, so a later reader gets
-  the same briefing the approver did.
+Use judgement on structure and styling; drop what the plan does not need.
+
+- **The ask** and the confirmed acceptance criteria, first.
+- **What changes**, shown rather than described. UI work: static mocks built from the
+  app's real design tokens, with declined alternatives beside the planned one, and
+  anything the code and docs do not set labelled as invented. Everything else:
+  before/after behaviour; code excerpts only where a decision turns on them.
+- **Risks, verification, and what is out of scope**, briefly.
+- **Open questions** as a form: each unsettled fork sits beside the mocks that show
+  its options, as selectable cards plus an optional note. A sticky **Copy answers**
+  button copies every question and chosen answer as plain text for the human to
+  paste back into chat — never re-ask the same questions as chat prose.
+- **Decisions already made**, consolidated in one place, so a later reader gets the
+  same briefing the approver did.
+
+Write for a strong engineer who knows this repo: skip the repo tour, the stack, and
+the toolchain. Prose is ASD-STE100 Simplified Technical English.
 
 ## Revisions
 
